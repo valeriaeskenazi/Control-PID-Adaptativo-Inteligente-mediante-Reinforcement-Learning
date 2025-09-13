@@ -304,10 +304,16 @@ class UniversalPIDControlEnv(gym.Env):
         
         adjusted_dead_band = self.dead_band * tolerance_factor
         
-        # Base adaptive reward logic
+        # Base adaptive reward logic with graduated precision within dead band
         base_reward = 0.0
         if error_abs <= adjusted_dead_band:
-            base_reward = max_reward
+            # Graduated reward: maximum at exact setpoint, decreasing within dead band
+            if error_abs == 0.0:
+                precision_factor = 1.0  # Perfect setpoint matching
+            else:
+                # Linear decrease from 1.0 to 0.8 as error approaches dead band limit
+                precision_factor = 1.0 - (error_abs / adjusted_dead_band) * 0.2
+            base_reward = max_reward * precision_factor
             
         elif pv < self.lower_range or pv > self.upper_range:
             base_reward = negative_reward
