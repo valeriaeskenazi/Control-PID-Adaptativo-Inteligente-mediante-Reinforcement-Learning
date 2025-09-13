@@ -292,13 +292,15 @@ def create_agent(agent_type: str, config: PIDAgentConfig) -> AbstractPIDAgent:
         from .algorithms.dqn_agent import DQNAgent
         return DQNAgent(config)
     elif agent_type == 'sac':
-        from .algorithms.sac_agent import SACAgent
-        return SACAgent(config)
+        # from .algorithms.sac_agent import SACAgent
+        # return SACAgent(config)
+        raise NotImplementedError("SAC agent not yet implemented")
     elif agent_type == 'ddpg':
-        from .algorithms.ddpg_agent import DDPGAgent
-        return DDPGAgent(config)
+        # from .algorithms.ddpg_agent import DDPGAgent
+        # return DDPGAgent(config)
+        raise NotImplementedError("DDPG agent not yet implemented")
     else:
-        raise ValueError(f"Unknown agent type: {agent_type}")
+        raise ValueError(f"Unknown agent type: {agent_type}. Available: ['ppo', 'dqn']")
 
 
 if __name__ == "__main__":

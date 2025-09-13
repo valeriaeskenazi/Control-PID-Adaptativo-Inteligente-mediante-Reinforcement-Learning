@@ -43,7 +43,8 @@ class ActorNetwork(nn.Module):
         self.feature_extractor = FeatureExtractor(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
-            dropout_rate=dropout_rate
+            dropout_rate=dropout_rate,
+            use_batch_norm=False  # Disable batch norm to avoid single batch issues
         )
         
         self.pid_output = PIDOutputLayer(
@@ -94,7 +95,8 @@ class CriticNetwork(nn.Module):
         self.feature_extractor = FeatureExtractor(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
-            dropout_rate=dropout_rate
+            dropout_rate=dropout_rate,
+            use_batch_norm=False  # Disable batch norm to avoid single batch issues
         )
         
         self.value_head = ValueHead(
@@ -262,7 +264,8 @@ class StochasticActor(nn.Module):
         self.feature_extractor = FeatureExtractor(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
-            dropout_rate=dropout_rate
+            dropout_rate=dropout_rate,
+            use_batch_norm=False  # Disable batch norm to avoid single batch issues
         )
         
         # Mean (deterministic PID parameters)

@@ -29,6 +29,15 @@ from .actor_critic import (
     StochasticActor
 )
 
+# Q-networks
+from .q_networks import (
+    DiscretePIDQNetwork,
+    DuelingPIDQNetwork,
+    ContinuousQNetwork,
+    PIDActionDiscretizer,
+    create_q_network
+)
+
 __all__ = [
     # Base components
     'FeatureExtractor',
@@ -43,5 +52,12 @@ __all__ = [
     'ActorNetwork',
     'CriticNetwork',
     'SharedActorCritic',
-    'StochasticActor'
+    'StochasticActor',
+    
+    # Q-Networks
+    'DiscretePIDQNetwork',
+    'DuelingPIDQNetwork', 
+    'ContinuousQNetwork',
+    'PIDActionDiscretizer',
+    'create_q_network'
 ]

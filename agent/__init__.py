@@ -32,6 +32,39 @@ from .networks import (
     StochasticActor
 )
 
+# Experience replay and learning components
+from .buffer import (
+    SimpleReplayBuffer,
+    PriorityReplayBuffer,
+    EpisodeBuffer,
+    PIDSpecificBuffer,
+    create_buffer,
+    Experience,
+    PolicyExperience,
+    PIDExperience
+)
+
+# Policy components
+from .policy import (
+    DeterministicPolicy,
+    StochasticPolicy,
+    EpsilonGreedyPolicy,
+    BetaPolicy,
+    PIDPolicyEvaluator,
+    ExplorationStrategy,
+    create_policy
+)
+
+# Transfer learning components
+from .transfer_learning import (
+    TransferLearningManager,
+    ProcessCharacteristics,
+    TransferLearningMetrics,
+    TransferMethod,
+    ProcessSimilarityAnalyzer,
+    create_transfer_learner
+)
+
 __all__ = [
     # Base classes
     'AbstractPIDAgent',
@@ -47,5 +80,32 @@ __all__ = [
     'ActorNetwork',
     'CriticNetwork',
     'SharedActorCritic',
-    'StochasticActor'
+    'StochasticActor',
+    
+    # Buffer components
+    'SimpleReplayBuffer',
+    'PriorityReplayBuffer',
+    'EpisodeBuffer', 
+    'PIDSpecificBuffer',
+    'create_buffer',
+    'Experience',
+    'PolicyExperience',
+    'PIDExperience',
+    
+    # Policy components
+    'DeterministicPolicy',
+    'StochasticPolicy',
+    'EpsilonGreedyPolicy',
+    'BetaPolicy',
+    'PIDPolicyEvaluator',
+    'ExplorationStrategy',
+    'create_policy',
+    
+    # Transfer learning components
+    'TransferLearningManager',
+    'ProcessCharacteristics',
+    'TransferLearningMetrics',
+    'TransferMethod',
+    'ProcessSimilarityAnalyzer',
+    'create_transfer_learner'
 ]
