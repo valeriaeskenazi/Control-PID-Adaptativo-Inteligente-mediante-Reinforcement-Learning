@@ -32,6 +32,7 @@ class UniversalPIDControlEnv(gym.Env):
         default_config = {
             'upper_range': 100.0, #Limite fisico de seguridad superior del proceso
             'lower_range': 0.0, #Limite fisico de seguridad inferior del proceso
+            'setpoint': 75.0, # Valor objetivo del proceso (target)
             'dead_band': 2.0, # Banda de trabajo alrededor del setpoint
             'max_episode_steps': 1000,
             'dt': 1.0,  # Time step [s]
@@ -48,6 +49,7 @@ class UniversalPIDControlEnv(gym.Env):
         
         self.upper_range = config['upper_range']
         self.lower_range = config['lower_range'] 
+        self.setpoint = config['setpoint']
         self.dead_band = config['dead_band']
         self.max_episode_steps = config['max_episode_steps']
         self.dt = config['dt']
@@ -65,20 +67,20 @@ class UniversalPIDControlEnv(gym.Env):
         # Enhanced observation space with 6 dimensions
         self.observation_space = spaces.Box(
             low=np.array([
-                self.lower_range - range_span*0.2,  # PV
-                self.lower_range,                    # Setpoint
-                -range_span,                         # Error
-                -range_span,                         # Previous error
-                -range_span*100,                     # Error integral
-                -range_span*10                       # Error derivative
+                self.lower_range - range_span*0.2,  # Límite inferior posible para PV
+                self.lower_range,                    # Límite inferior posible para setpoint
+                -range_span,                         # Límite inferior para error
+                -range_span,                         # Límite inferior para error anterior
+                -range_span*100,                     # Límite inferior para error integral
+                -range_span*10                       # Límite inferior para error derivativo
             ]),
             high=np.array([
-                self.upper_range + range_span*0.2,  # PV
-                self.upper_range,                    # Setpoint
-                range_span,                          # Error
-                range_span,                          # Previous error
-                range_span*100,                      # Error integral
-                range_span*10                        # Error derivative
+                self.upper_range + range_span*0.2,  # Límite superior posible para PV
+                self.upper_range,                    # Límite superior posible para setpoint
+                range_span,                          # Límite superior para error
+                range_span,                          # Límite superior para error anterior
+                range_span*100,                      # Límite superior para error integral
+                range_span*10                        # Límite superior para error derivativo
             ]),
             dtype=np.float32
         )
@@ -157,18 +159,7 @@ class UniversalPIDControlEnv(gym.Env):
               options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
         
-        # El setpoint debe venir como parámetro, no generarse aleatoriamente
-        if options and 'setpoint' in options:
-            self.setpoint = options['setpoint']
-        else:
-            # Solo para testing - en uso real debería ser obligatorio
-            margin = (self.upper_range - self.lower_range) * 0.1
-            self.setpoint = np.random.uniform(
-                self.lower_range + margin, 
-                self.upper_range - margin
-            )
-            print("WARNING: Setpoint no especificado, usando aleatorio para testing")
-        
+        # Setpoint se toma de la configuración inicial (no se modifica en reset)        
         # El PV inicial debe venir del proceso real/simulado, no inventarse
         if self.external_process is not None:
             self.pv = self.external_process.get_initial_pv()
@@ -342,7 +333,7 @@ class UniversalPIDControlEnv(gym.Env):
             energy_penalty
         )
         
-        return float(np.clip(total_reward, negative_reward, max_reward * 1.2))
+        return float(np.clip(total_reward, negative_reward, max_reward))
     
     
     def _check_truncation(self, error: float) -> bool:
@@ -383,6 +374,21 @@ class UniversalPIDControlEnv(gym.Env):
             self.error_integral,
             self.error_derivative
         ], dtype=np.float32)
+    
+    def set_setpoint(self, new_setpoint: float) -> None:
+        """
+        Cambiar el setpoint del proceso después del entrenamiento.
+        
+        Args:
+            new_setpoint: Nuevo valor objetivo para el proceso
+        """
+        if not (self.lower_range <= new_setpoint <= self.upper_range):
+            raise ValueError(f"Setpoint {new_setpoint} debe estar entre {self.lower_range} y {self.upper_range}")
+        
+        self.setpoint = new_setpoint
+        
+        if hasattr(self, 'logger'):
+            self.logger.info(f"Setpoint cambiado a: {new_setpoint}")
     
     def render(self, mode: str = 'human') -> None:
         """Render environment state with enhanced information"""
