@@ -109,62 +109,106 @@ class SimpleReplayBuffer(AbstractReplayBuffer):
         self.buffer.clear()
         self.size = 0
 
+#Priority Replay Buffer Implementation, adapted from original paper
+class SumTree:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree = np.zeros(2 * capacity - 1)  # Tamaño del árbol binario completo
+        self.data = np.zeros(capacity, dtype=object)  # Aquí guardamos las experiencias
+        self.write = 0  # Puntero circular para escribir
+        self.n_entries = 0  # Cuántas entradas tenemos
+
+    def _propagate(self, idx, change):
+        parent = (idx - 1) // 2  # Índice del padre
+        self.tree[parent] += change  # Sumar el cambio
+        if parent != 0:  # Si no es la raíz, seguir propagando
+            self._propagate(parent, change)    
+
+    def _retrieve(self, idx, s):
+        left = 2 * idx + 1
+        right = left + 1
+        
+        if left >= len(self.tree):
+            return idx
+        
+        if s <= self.tree[left]:
+            return self._retrieve(left, s)
+        else:
+            return self._retrieve(right, s - self.tree[left])
+
+    def total(self):
+        return self.tree[0]
+
+    def add(self, p, data):
+        idx = self.write + self.capacity - 1 # Índice en las hojas del árbol
+        self.data[self.write] = data # Guardar la experiencia
+        self.update(idx, p) # Actualizar prioridad y propagar hacia arriba
+        
+        self.write += 1
+        if self.write >= self.capacity:
+            self.write = 0
+        
+        if self.n_entries < self.capacity:
+            self.n_entries += 1     
+
+    def update(self, idx, p):
+        change = p - self.tree[idx] # Cuánto cambió la prioridad
+        self.tree[idx] = p # Actualizar la hoja
+        self._propagate(idx, change) # Propagar el cambio hacia la raíz
+
+    def get(self, s):
+        idx = self._retrieve(0, s)
+        dataIdx = idx - self.capacity + 1
+        return (idx, self.tree[idx], self.data[dataIdx])
+    
+
 class PriorityReplayBuffer(AbstractReplayBuffer):
-    """
-    Prioritized experience replay buffer.
-    
-    Samples experiences based on TD-error priorities, useful for
-    improving sample efficiency in value-based methods.
-    """
-    
     def __init__(
         self, 
         capacity: int = 100000,
         alpha: float = 0.6,
         beta: float = 0.4,
-        beta_increment: float = 0.001,
+        total_training_steps: int = 1000000,
         device: str = 'cpu'
     ):
         super().__init__(capacity, device)
-        self.alpha = alpha  # Priority exponent
-        self.beta = beta    # Importance sampling exponent
-        self.beta_increment = beta_increment
-        self.max_beta = 1.0
+        self.alpha = alpha
+        self.beta = beta
+        self.beta_increment = (1.0 - beta) / total_training_steps
         
-        # Use sum tree for efficient priority sampling
-        self.buffer = deque(maxlen=capacity)
-        self.priorities = deque(maxlen=capacity)
-        self.max_priority = 1.0
-    
-    def add(self, experience: Experience, priority: float = None) -> None:
-        """Add experience with priority."""
-        if priority is None:
-            priority = self.max_priority
+        self.tree = SumTree(capacity)
+        self.epsilon = 1e-6
+
+    def add(self, experience: Experience, td_error: float = None) -> None:
+        if td_error is None:
+            priority = self.tree.max_priority if self.tree.n_entries > 0 else 1.0
+        else:
+            priority = abs(td_error) + self.epsilon
         
-        self.buffer.append(experience)
-        self.priorities.append(priority)
-        self.max_priority = max(self.max_priority, priority)
-        self.size = len(self.buffer)
-    
+        self.tree.add(priority, experience)
+        self.size = self.tree.n_entries
+
     def sample(self, batch_size: int) -> Dict[str, torch.Tensor]:
-        """Sample batch based on priorities."""
-        if batch_size > self.size:
-            batch_size = self.size
+        batch = []
+        indices = []
+        priorities = []
         
-        # Calculate sampling probabilities
-        priorities = np.array(self.priorities, dtype=np.float32)
-        probabilities = priorities ** self.alpha
-        probabilities /= probabilities.sum()
+        segment = self.tree.total() / batch_size
         
-        # Sample indices
-        indices = np.random.choice(self.size, batch_size, p=probabilities)
-        
-        # Sample experiences
-        batch = [self.buffer[i] for i in indices]
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+            s = random.uniform(a, b)
+            
+            idx, priority, experience = self.tree.get(s)
+            batch.append(experience)
+            indices.append(idx)
+            priorities.append(priority)
         
         # Calculate importance sampling weights
-        weights = (self.size * probabilities[indices]) ** (-self.beta)
-        weights /= weights.max()  # Normalize weights
+        sampling_probabilities = np.array(priorities) / self.tree.total()
+        weights = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
+        weights /= weights.max()
         
         # Convert to tensors
         states = torch.FloatTensor([e.state for e in batch]).to(self.device)
@@ -175,7 +219,7 @@ class PriorityReplayBuffer(AbstractReplayBuffer):
         weights_tensor = torch.FloatTensor(weights).to(self.device)
         
         # Update beta
-        self.beta = min(self.max_beta, self.beta + self.beta_increment)
+        self.beta = min(1.0, self.beta + self.beta_increment)
         
         return {
             'states': states,
@@ -186,16 +230,8 @@ class PriorityReplayBuffer(AbstractReplayBuffer):
             'weights': weights_tensor,
             'indices': indices
         }
-    
-    def update_priorities(self, indices: np.ndarray, priorities: np.ndarray) -> None:
-        """Update priorities for sampled experiences."""
-        for idx, priority in zip(indices, priorities):
-            self.priorities[idx] = priority + 1e-6  # Small epsilon to avoid zero priority
-            self.max_priority = max(self.max_priority, priority + 1e-6)
-    
-    def clear(self) -> None:
-        """Clear buffer."""
-        self.buffer.clear()
-        self.priorities.clear()
-        self.size = 0
-        self.max_priority = 1.0        
+
+    def update_priorities(self, indices: np.ndarray, td_errors: np.ndarray) -> None:
+        for idx, td_error in zip(indices, td_errors):
+            priority = abs(td_error) + self.epsilon
+            self.tree.update(idx, priority)        
