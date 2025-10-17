@@ -1,10 +1,11 @@
 """
-Simulador de Control de Nivel de Tanque
-Simulador físico simple para entrenar agentes de control PID
-Compatible con interface OpenAI Gym (sin dependencia directa)
+Simulador de Control de Nivel de Tanque - Híbrido
+Simulador físico con funcionalidades del UniversalPIDControlEnv
+Compatible con interface OpenAI Gym
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from gymnasium import spaces
 from typing import Tuple, Optional, Dict, Any
 
 
@@ -27,7 +28,10 @@ class TankLevelSimulator:
                  dt: float = 1.0,               # s - Paso de simulación  
                  noise_level: float = 0.01,     # Nivel de ruido en medición
                  initial_level: float = 2.5,    # m - Nivel inicial
-                 render_mode: Optional[str] = None):  # Interface compatible con Gym
+                 render_mode: Optional[str] = None,  # Interface compatible con Gym
+                 # Parámetros híbridos del UniversalPIDControlEnv
+                 dead_band: float = 0.1,        # m - Banda muerta
+                 max_episode_steps: int = 200): # Máximo steps por episodio
         
         # Parámetros del tanque
         self.tank_area = tank_area
@@ -37,6 +41,11 @@ class TankLevelSimulator:
         self.dt = dt
         self.noise_level = noise_level
         self.render_mode = render_mode
+        
+        # Parámetros híbridos del UniversalPIDControlEnv
+        self.dead_band = dead_band
+        self.max_episode_steps = max_episode_steps
+        self.step_count = 0
         
         # Estado del proceso
         self.level = initial_level  # m - Nivel actual (PV)
@@ -61,22 +70,20 @@ class TankLevelSimulator:
             'outflow': []
         }
         
-        # Definir espacios de observación y acción (compatible con Gym)
+        # Definir espacios de observación y acción (híbrido Gym + Universal)
         # Observation space: [level, setpoint, error, prev_error, integral, derivative]
-        self.observation_space = {
-            'low': np.array([-max_height, 0.0, -max_height, -max_height, -np.inf, -np.inf]),
-            'high': np.array([max_height, max_height, max_height, max_height, np.inf, np.inf]),
-            'shape': (6,),
-            'dtype': np.float32
-        }
+        self.observation_space = spaces.Box(
+            low=np.array([0.0, 0.0, -max_height, -max_height, -np.inf, -np.inf]),
+            high=np.array([max_height, max_height, max_height, max_height, np.inf, np.inf]),
+            dtype=np.float32
+        )
         
-        # Action space: Caudal de entrada (0 a max_inflow L/s)
-        self.action_space = {
-            'low': 0.0,
-            'high': max_inflow,
-            'shape': (1,),
-            'dtype': np.float32
-        }
+        # Action space híbrido: acepta tanto caudal directo como parámetros PID
+        self.action_space = spaces.Box(
+            low=np.array([0.1, 0.01, 0.001]),  # [Kp_min, Ki_min, Kd_min]
+            high=np.array([10.0, 5.0, 2.0]),   # [Kp_max, Ki_max, Kd_max]
+            dtype=np.float32
+        )
         
         # Metadata compatible con Gym
         self.metadata = {
@@ -94,23 +101,44 @@ class TankLevelSimulator:
     
     def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """
-        Ejecutar un paso de simulación (Gym interface)
+        Ejecutar un paso de simulación híbrido (Gym + Universal)
         
         Args:
-            action: Acción del agente (caudal de entrada o array)
+            action: Parámetros PID [Kp, Ki, Kd] o caudal directo
         
         Returns:
             observation: Estado actual [level, setpoint, error, prev_error, integral, derivative]
-            reward: Recompensa para el agente
+            reward: Recompensa híbrida (tanque + universal)
             terminated: Si el episodio terminó por condición terminal
             truncated: Si el episodio terminó por límite de tiempo
             info: Información adicional
         """
-        # Convertir acción a escalar si es array
-        if hasattr(action, '__len__'):
-            control_signal = float(action[0])
+        # Determinar si la acción es PID o caudal directo
+        if hasattr(action, '__len__') and len(action) == 3:
+            # Acción PID: [Kp, Ki, Kd]
+            kp, ki, kd = action
+            
+            # Calcular error actual
+            error = self.setpoint - self.level
+            
+            # Actualizar integral y derivada
+            self.integral_error += error * self.dt
+            derivative_error = (error - self.prev_error) / self.dt if self.dt > 0 else 0.0
+            
+            # Calcular señal de control PID
+            control_signal = kp * error + ki * self.integral_error + kd * derivative_error
+            control_signal = 4.0 + control_signal  # Caudal base
+            
+            # Actualizar error anterior
+            self.prev_error = error
+            
         else:
-            control_signal = float(action)
+            # Acción directa de caudal (compatibilidad hacia atrás)
+            if hasattr(action, '__len__'):
+                control_signal = float(action[0])
+            else:
+                control_signal = float(action)
+        
         # Limitar caudal de entrada
         inflow = np.clip(control_signal, self.min_inflow, self.max_inflow)
         
@@ -152,12 +180,15 @@ class TankLevelSimulator:
             derivative_error         # Derivada del error
         ], dtype=np.float32)
         
-        # Calcular recompensa
-        reward = self._calculate_reward(error)
+        # Calcular recompensa híbrida
+        reward = self._calculate_hybrid_reward(error)
         
-        # Verificar condiciones de terminación
+        # Incrementar contador de pasos
+        self.step_count += 1
+        
+        # Verificar condiciones de terminación híbridas
         terminated = self._check_terminated()
-        truncated = False  # Por ahora no usamos truncated
+        truncated = self.step_count >= self.max_episode_steps
         
         # Información adicional
         info = {
@@ -197,6 +228,30 @@ class TankLevelSimulator:
             safety_penalty = -2.0 * (self.level - self.max_height * 0.9)
         
         return error_reward + safety_penalty
+    
+    def _calculate_hybrid_reward(self, error: float) -> float:
+        """
+        Calcular recompensa híbrida (tanque + universal)
+        
+        Combina:
+        - Recompensa física del tanque
+        - Lógica de banda muerta del UniversalPIDControlEnv
+        """
+        # Recompensa base del tanque (física real)
+        base_reward = self._calculate_reward(error)
+        
+        # Recompensa de banda muerta (lógica universal)
+        if abs(error) <= self.dead_band:
+            dead_band_bonus = 1.0  # Bonus por estar en banda muerta
+        else:
+            dead_band_bonus = 0.0
+        
+        # Penalización por control agresivo
+        control_penalty = 0.0
+        if abs(error) > 2.0:  # Error muy grande
+            control_penalty = -0.1
+        
+        return base_reward + dead_band_bonus + control_penalty
     
     def _check_terminated(self) -> bool:
         """
@@ -254,10 +309,11 @@ class TankLevelSimulator:
         if setpoint is not None:
             self.setpoint = np.clip(setpoint, self.min_level, self.max_level)
         
-        # Reiniciar variables de control
+        # Reiniciar variables de control híbridas
         self.time = 0.0
         self.prev_error = 0.0
         self.integral_error = 0.0
+        self.step_count = 0
         
         # Limpiar historia
         self.history = {key: [] for key in self.history.keys()}

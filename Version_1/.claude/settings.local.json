@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/gonzalo/Documents/valeria/MASTER/SEGUNDO SEMESTRE/INTELIGENCIA_ARTIFICIAL_GENERATIVA/OBLIGATORIO/Presentacion_Final/**)",
+      "Read(//Users/gonzalo/Documents/valeria/MASTER/PRIMER SEMESTRE/MACHINE LEARNING/OBLIGATORIO/Entrega/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

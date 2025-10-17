@@ -5,6 +5,126 @@ from typing import Optional, Dict, Any, Tuple, Union
 from collections import deque
 import logging
 
+# ============================================================
+# CLASES PARA MODO PID TUNING
+# ============================================================
+#############################################################################################################################
+class PIDController:
+    """Controlador PID con anti-windup"""
+    
+    def __init__(self, kp=1.0, ki=0.1, kd=0.05, dt=1.0, output_limits=(-1.0, 1.0)):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.dt = dt
+        self.output_limits = output_limits
+        
+        self.integral = 0.0
+        self.prev_error = 0.0
+    
+    def update_gains(self, kp, ki, kd):
+        """Actualizar ganancias PID"""
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+    
+    def compute(self, error):
+        """Calcular salida PID con anti-windup"""
+        # Proporcional
+        P = self.kp * error
+        
+        # Integral
+        self.integral += error * self.dt
+        I = self.ki * self.integral
+        
+        # Derivativo
+        derivative = (error - self.prev_error) / self.dt
+        D = self.kd * derivative
+        
+        # Salida total
+        output = P + I + D
+        
+        # Aplicar límites
+        output_clipped = np.clip(output, *self.output_limits)
+        
+        # Anti-windup: si hay saturación, no acumular integral
+        if output != output_clipped:
+            self.integral -= error * self.dt
+        
+        self.prev_error = error
+        return output_clipped
+    
+    def reset(self):
+        """Resetear estado interno (llamar en cada reset de episodio)"""
+        self.integral = 0.0
+        self.prev_error = 0.0
+#############################################################################################################################
+#############################################################################################################################
+class DeltaPIDActionSpace:
+    """Espacio de acciones incremental para tuning PID"""
+    
+    def __init__(self, initial_pid=(1.0, 0.1, 0.05), delta_percent=0.2, 
+                 limits=None):
+        self.initial_pid = np.array(initial_pid, dtype=np.float32)
+        self.current_pid = self.initial_pid.copy()
+        self.delta = delta_percent
+        
+        if limits is None:
+            self.limits = [
+                (0.01, 100.0),  # Kp
+                (0.0, 10.0),     # Ki
+                (0.0, 10.0)      # Kd
+            ]
+        else:
+            self.limits = limits
+        
+        # Mapeo de acciones: (nombre, param_idx, dirección)
+        self.action_map = {
+            0: ('Kp', 0, +1),
+            1: ('Ki', 1, +1),
+            2: ('Kd', 2, +1),
+            3: ('Kp', 0, -1),
+            4: ('Ki', 1, -1),
+            5: ('Kd', 2, -1),
+            6: ('None', -1, 0)
+        }
+        
+        self.n_actions = len(self.action_map)
+    
+    def apply_action(self, action_idx):
+        """Aplicar acción y retornar PID actualizado"""
+        param_name, param_idx, direction = self.action_map[action_idx]
+        
+        if param_idx >= 0:
+            multiplier = 1.0 + (direction * self.delta)
+            self.current_pid[param_idx] *= multiplier
+            
+            # Aplicar límites
+            min_val, max_val = self.limits[param_idx]
+            self.current_pid[param_idx] = np.clip(
+                self.current_pid[param_idx],
+                min_val,
+                max_val
+            )
+        
+        return tuple(self.current_pid)
+    
+    def reset(self, pid=None):
+        """Resetear al PID inicial"""
+        if pid is None:
+            self.current_pid = self.initial_pid.copy()
+        else:
+            self.current_pid = np.array(pid, dtype=np.float32)
+    
+    def get_current_pid(self):
+        """Obtener PID actual"""
+        return tuple(self.current_pid)
+#############################################################################################################################
+
+# ============================================================
+# AMBIENTE UNIVERSAL
+# ============================================================
+
 class UniversalPIDControlEnv(gym.Env):
     """
     Universal adaptive environment for PID control with reinforcement learning.
@@ -24,10 +144,12 @@ class UniversalPIDControlEnv(gym.Env):
     Args:
         config: Configuration dictionary with environment parameters
     """
-    
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, control_mode='direct'):
         super().__init__()
-        
+
+        # NUEVO: Guardar modo de control
+        self.control_mode = control_mode
+
         # Default configuration
         default_config = {
             'upper_range': 100.0, #Limite fisico de seguridad superior del proceso
@@ -58,10 +180,37 @@ class UniversalPIDControlEnv(gym.Env):
         self.EASY_THRESHOLD = 60.0      # < 60s = proceso fácil
         self.DIFFICULT_THRESHOLD = 1800.0  # >= 30min = proceso difícil
         
-        # Action and observation spaces
-        self.action_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(1,), dtype=np.float32 # Control output normalized (-1 to 1)
-        )
+
+        # Action and observation spaces (depende del modo)
+        if control_mode == 'direct':
+            # Modo control directo: acción continua
+            self.action_space = spaces.Box(
+                low=-1.0, high=1.0, shape=(1,), dtype=np.float32
+            )
+            self.pid_action_space = None
+            self.pid_controller = None
+            
+        elif control_mode == 'pid_tuning':
+            # Modo tuning PID: acciones discretas
+            self.pid_action_space = DeltaPIDActionSpace(
+                initial_pid=(1.0, 0.1, 0.05),
+                delta_percent=0.2
+            )
+            self.pid_controller = PIDController(
+                kp=1.0, ki=0.1, kd=0.05,
+                dt=self.dt,
+                output_limits=(-1.0, 1.0)
+            )
+            self.action_space = spaces.Discrete(self.pid_action_space.n_actions)
+            
+            print("=" * 60)
+            print(f"✅ Modo PID Tuning activado")
+            print(f"   Acciones disponibles: {self.pid_action_space.n_actions}")
+            print(f"   PID inicial: {self.pid_action_space.get_current_pid()}")
+            print("=" * 60)
+            
+        else:
+            raise ValueError(f"control_mode debe ser 'direct' o 'pid_tuning', recibido: '{control_mode}'")
         
         range_span = self.upper_range - self.lower_range
         # Enhanced observation space with 6 dimensions
@@ -188,12 +337,35 @@ class UniversalPIDControlEnv(gym.Env):
         
         if self.logger:
             self.logger.debug(f"Environment reset - Episode {self.episode_metrics['total_episodes']}")
-        
+
+        # NUEVO: Resetear componentes PID si está en modo tuning
+        if self.control_mode == 'pid_tuning':
+            self.pid_action_space.reset()
+            self.pid_controller.reset()
+            pid_params = self.pid_action_space.get_current_pid()
+            self.pid_controller.update_gains(*pid_params)
+
         return self._get_observation(), {}
     
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        control_output = action[0]
+    def step(self, action: Union[np.ndarray, int]) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         
+        # NUEVO: Determinar control_output según modo
+        if self.control_mode == 'direct':
+            control_output = action[0]
+            
+        elif self.control_mode == 'pid_tuning':
+            # 1. Traducir índice a parámetros PID
+            pid_params = self.pid_action_space.apply_action(action)
+            
+            # 2. Actualizar ganancias del controlador
+            self.pid_controller.update_gains(*pid_params)
+            
+            # 3. Calcular error actual
+            error = self.setpoint - self.pv
+            
+            # 4. Computar control_output
+            control_output = self.pid_controller.compute(error)
+    
         # Obtener nueva PV del proceso externo
         if self.external_process is not None:
             self.pv = self.external_process.step(control_output, self.setpoint)
@@ -235,10 +407,18 @@ class UniversalPIDControlEnv(gym.Env):
         terminated = self.step_count >= self.max_episode_steps
         truncated = self._check_truncation(error)
             
-        return self._get_observation(), reward, terminated, truncated, {
+        # Preparar info dict
+        info = {
             'process_difficulty': self.process_difficulty,
             'estimated_response_time': estimated_response_time
         }
+
+        # NUEVO: Agregar info de PID si está en modo tuning
+        if self.control_mode == 'pid_tuning':
+            info['pid_params'] = self.pid_action_space.get_current_pid()
+            info['control_output'] = float(control_output)
+
+        return self._get_observation(), reward, terminated, truncated, info
     
     def _classify_difficulty(self, response_time):
         """Clasificar dificultad según tiempo de respuesta"""
@@ -411,7 +591,7 @@ class UniversalPIDControlEnv(gym.Env):
         if self.logger:
             self.logger.debug(f"Episode metrics updated: {self.episode_metrics}")
 
-
+#############################################################################################################################
 class ResponseTimeDetector:
     """
     Detector simple de tiempo de respuesta del proceso.
@@ -467,45 +647,5 @@ class ResponseTimeDetector:
             return np.median(self.response_time_estimates[-5:])  # Mediana de últimas 5 estimaciones
         
         return None
+#############################################################################################################################
 
-
-# Ejemplo de uso con diferentes procesos
-if __name__ == "__main__":
-    # Crear ambiente universal
-    env = UniversalPIDControlEnv()
-    
-    # Simular proceso rápido (fácil)
-    class FastProcess:
-        def __init__(self):
-            self.pv = 50.0
-            
-        def get_initial_pv(self):
-            return self.pv
-            
-        def step(self, control, setpoint):
-            self.pv += control * 5.0  # Respuesta rápida
-            return self.pv + np.random.normal(0, 0.1)
-    
-    fast_process = FastProcess()
-    env.connect_external_process(fast_process)
-    
-    # Test
-    obs, _ = env.reset(options={'setpoint': 60.0})
-    print(f"Setpoint: {env.setpoint:.2f}")
-    
-    for step in range(100):
-        error = obs[2]
-        action = [np.clip(error * 0.1, -1, 1)]
-        
-        obs, reward, terminated, truncated, info = env.step(action)
-        
-        if step % 20 == 0:
-            env.render()
-            print(f"  Reward: {reward:.3f}, Difficulty: {info['process_difficulty']}")
-            
-        if terminated or truncated:
-            break
-    
-    print(f"\nProceso clasificado como: {env.process_difficulty}")
-    if info['estimated_response_time']:
-        print(f"Tiempo de respuesta estimado: {info['estimated_response_time']:.1f} segundos")
