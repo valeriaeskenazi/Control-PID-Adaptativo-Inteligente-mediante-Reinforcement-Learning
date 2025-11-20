@@ -171,7 +171,10 @@ print("=" * 80)
 
 # Al final del script
 print("\n📊 Generando gráficos...")
-env.logger.plot_results(
-    save_dir='./results/test_quick',
-    show=False  # True para ver interactivamente
-)
+if hasattr(env, 'logger') and env.logger is not None:
+    env.logger.plot_results(
+        save_dir='./results/test_quick',
+        show=False  # True para ver interactivamente
+    )
+else:
+    print("ℹ️  Logger no disponible - gráficos no generados")
