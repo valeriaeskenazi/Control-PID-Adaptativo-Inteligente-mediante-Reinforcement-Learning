@@ -1,11 +1,3 @@
-"""
-Abstract base classes for PID controller reinforcement learning agents.
-
-This module defines the interface that all RL agents must implement,
-allowing for easy experimentation with different algorithms while
-maintaining consistent behavior for PID parameter tuning.
-"""
-
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple, Optional, Union
 import torch
@@ -14,30 +6,16 @@ import numpy as np
 
 class AbstractPIDAgent(ABC):
     """
-    Abstract base class for PID tuning reinforcement learning agents.
-    
-    All RL agents (PPO, DQN, SAC, etc.) must inherit from this class
-    and implement the required methods.
+    Todos los agentes RL (PPO, DQN, SAC, etc.) deben heredar de esta clase.
     """
     
     def __init__(
         self,
-        state_dim: int = 6,
-        action_dim: int = 7,  # 7 acciones discretas para DeltaPIDActionSpace
+        state_dim: int = 6, # 6 dimensiones de estado [PV, setpoint, error, error_prev, error_integral, error_derivative]
+        action_dim: int = 7,  # 7 acciones discretas para DeltaPIDActionSpace, 1 tupla del tipo (kp,ki,kd) para control directo
         device: str = 'cpu',
         seed: Optional[int] = None
     ):
-        """
-        Initialize base agent.
-        
-        Args:
-            state_dim: Dimension of state space (6 for PID environment)
-            action_dim: Dimension of action space 
-                       - 7 para acciones discretas (DeltaPIDActionSpace: 0-6)
-                       - 1 para control directo continuo
-            device: PyTorch device ('cpu' or 'cuda')
-            seed: Random seed for reproducibility
-        """
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.device = torch.device(device)
@@ -50,18 +28,16 @@ class AbstractPIDAgent(ABC):
     
     @abstractmethod
     def select_action(
-        self, 
-        state: np.ndarray, 
+        self,                       
+        state: np.ndarray,          
         training: bool = True
     ) -> Union[int, np.ndarray]:
         """
-        Select action given current state.
-        
         Args:
-            state: Current state [PV, setpoint, error, error_prev, error_integral, error_derivative]
-            training: Whether in training mode (affects exploration)
+            state: Estado actual [PV, setpoint, error, error_prev, error_integral, error_derivative]
+            training: Indica si el agente está en modo entrenamiento (True) o evaluación (False)
         
-        Returns:
+        Devuelve:
             action: 
                 - int: índice de acción discreta (0-6) para agentes value-based en modo 'pid_tuning'
                 - np.ndarray: acción continua para agentes policy-based en modo 'direct'
@@ -71,72 +47,54 @@ class AbstractPIDAgent(ABC):
     @abstractmethod
     def update(self, batch_data: Dict[str, Any]) -> Dict[str, float]:
         """
-        Update agent parameters using a batch of experience.
+        Actualiza los parámetros del agente usando un lote de experiencias.
         
         Args:
-            batch_data: Dictionary containing experience batch
-                       Must include: states, actions, rewards, next_states, dones
+            batch_data: Diccionario con datos del lote.
+                       Debe incluir: states, actions, rewards, next_states, dones
         
-        Returns:
-            metrics: Dictionary of training metrics (losses, etc.)
+        Devuelve:
+            metrics: Diccionario con métricas de entrenamiento (pérdidas, etc.)
         """
         pass
     
     @abstractmethod
     def save(self, filepath: str) -> None:
-        """Save agent state to file."""
+        """Guardar el estado del agente en un archivo."""
         pass
     
     @abstractmethod
     def load(self, filepath: str) -> None:
-        """Load agent state from file."""
+        """Cargar el estado del agente desde un archivo."""
         pass
     
     def set_seed(self, seed: int) -> None:
-        """Set random seeds for reproducibility."""
+        """Para reproducibilidad."""
         torch.manual_seed(seed)
         np.random.seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
     
     def preprocess_state(self, state: np.ndarray) -> torch.Tensor:
-        """
-        Preprocess state for neural network input.
-        
-        Args:
-            state: Raw state from environment
-        
-        Returns:
-            processed_state: Normalized tensor ready for network
-        """
-        # Convert to tensor and add batch dimension if needed
+        """ Procesa el estado antes de pasarlo a la red neuronal."""
+        # Convertir a tensor y mover a dispositivo
         if isinstance(state, np.ndarray):
             state_tensor = torch.FloatTensor(state).to(self.device)
         else:
             state_tensor = state.to(self.device)
         
-        # Add batch dimension if single state
+        # Agregar dimensión de batch si es necesario
         if len(state_tensor.shape) == 1:
             state_tensor = state_tensor.unsqueeze(0)
         
-        return state_tensor
+        return state_tensor # Shape: (1, state_dim)
     
     def postprocess_action(self, action: torch.Tensor) -> Union[int, np.ndarray]:
-        """
-        Postprocess action from neural network output.
-        
-        Args:
-            action: Raw network output
-        
-        Returns:
-            processed_action: 
-                - int para acciones discretas
-                - np.ndarray para acciones continuas
-        """
+        """Procesa la salida de la red neuronal para obtener la acción final. """
         if isinstance(action, torch.Tensor):
             action = action.detach().cpu().numpy()
         
-        # Remove batch dimension if single action
+        # Sacar dimensión de batch si es necesario
         if len(action.shape) == 2 and action.shape[0] == 1:
             action = action.squeeze(0)
         
@@ -148,7 +106,7 @@ class AbstractPIDAgent(ABC):
         return action
     
     def get_training_info(self) -> Dict[str, Any]:
-        """Get current training information."""
+        """Devolver la información de entrenamiento actual del agente."""
         return {
             'training_step': self.training_step,
             'episode_count': self.episode_count,

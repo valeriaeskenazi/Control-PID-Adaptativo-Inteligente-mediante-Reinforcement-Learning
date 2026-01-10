@@ -1,4 +1,3 @@
-
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
@@ -37,7 +36,7 @@ class BasePIDControlEnv(gym.Env, ABC):
         
         # Configuración por defecto
         default_config = {
-            'n_variables': 1,  # NUEVO: número de variables a controlar
+            'n_variables': 1,  #número de variables a controlar
             'upper_range': 100.0,
             'lower_range': 0.0,
             'setpoint': 75.0,
@@ -46,7 +45,7 @@ class BasePIDControlEnv(gym.Env, ABC):
             'dt': 1.0,
             'enable_logging': False,
             'log_level': 'INFO',
-            'cooperation_bonus': 0.5  # NUEVO: bonus cuando todos alcanzan objetivo
+            'cooperation_bonus': 0.5  # bonus cuando todos alcanzan objetivo
         }
         
         # Merge configuración
@@ -120,7 +119,7 @@ class BasePIDControlEnv(gym.Env, ABC):
         """
         Normalizar parámetros: si son escalares, replicarlos para N variables.
         
-        Soporta:
+        Ejemplos:
         - Escalar: 100.0 → [100.0, 100.0, ..., 100.0]
         - Lista: [100.0, 90.0, 80.0] → se valida que tenga n_variables elementos
         """

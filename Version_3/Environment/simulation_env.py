@@ -1,6 +1,6 @@
 """
 Ambiente de simulación para control PID.
-Calcula control internamente (no requiere hardware real).
+Calcula control internamente (no requiere hardware real) para entrenamientos.
 
 Soporta:
 - Single-agent: n_variables=1 (comportamiento original)
