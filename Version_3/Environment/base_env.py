@@ -214,13 +214,13 @@ class BasePIDControlEnv(gym.Env, ABC):
     
     @abstractmethod
     def _setup_action_space(self) -> None:
-        """Definir espacio de acciones (implementar en clases hijas)."""
+        """Definir espacio de acciones (se implementa en clases hijas)."""
         pass
     
     @abstractmethod
     def _apply_control(self, action) -> Tuple[List[Optional[float]], List[Optional[Tuple]]]:
         """
-        Aplicar acción al proceso (implementar en clases hijas).
+        Aplicar acción al proceso (se implementa en clases hijas).
         
         Args:
             action: Acción del agente (puede ser lista de acciones en multi-agent)
@@ -237,7 +237,7 @@ class BasePIDControlEnv(gym.Env, ABC):
                         control_outputs: List[Optional[float]],
                         pid_params_list: List[Optional[Tuple]]) -> List[float]:
         """
-        Actualizar el proceso físico (implementar en clases hijas).
+        Actualizar el proceso físico (se implementa en clases hijas).
         
         Args:
             control_outputs: Lista de N señales de control

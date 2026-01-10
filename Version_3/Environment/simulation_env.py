@@ -1,10 +1,6 @@
 """
-Ambiente de simulación para control PID.
-Calcula control internamente (no requiere hardware real) para entrenamientos.
-
-Soporta:
-- Single-agent: n_variables=1 (comportamiento original)
-- Multi-agent: n_variables>1 (N agentes cooperativos)
+Ambiente de simulación para entrenamientos.
+Calcula control internamente (no requiere hardware real), es decir, simula el comportamiento del sistema.
 """
 
 import numpy as np
@@ -17,9 +13,7 @@ from Environment.pid_components import PIDController, DeltaPIDActionSpace
 
 class SimulationPIDEnv(BasePIDControlEnv):
     """
-    Ambiente de simulación que calcula PID internamente.
-    
-    Modos disponibles (control_mode):
+    Modo de control segun el tipo de agente:
     - 'direct': Control directo (acción continua → control output directo)
     - 'pid_tuning': Tuning de parámetros PID (acción discreta → ajusta Kp, Ki, Kd)
     
@@ -58,7 +52,7 @@ class SimulationPIDEnv(BasePIDControlEnv):
             
             self.action_space = spaces.Box(
                 low=np.array([0.0, 0.0, 0.0] * self.n_variables),
-                high=np.array([100.0, 1.0, 1.0] * self.n_variables),
+                high=np.array([100.0, 10.0, 1.0] * self.n_variables),
                 shape=(n_params,),  
                 dtype=np.float32
             )
@@ -112,7 +106,7 @@ class SimulationPIDEnv(BasePIDControlEnv):
                 )
             
             print("=" * 60)
-            print("✅ Modo: PID Tuning (Simulación)")
+            print(" Modo: PID Tuning (Simulación)")
             print(f"   N Variables: {self.n_variables}")
             print(f"   Acciones por variable: {self.pid_action_spaces[0].n_actions}")
             if self.n_variables == 1:
