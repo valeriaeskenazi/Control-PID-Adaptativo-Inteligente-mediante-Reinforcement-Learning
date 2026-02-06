@@ -13,8 +13,7 @@ from typing import Tuple, List, Optional
 
 class PIDController:
     """    
-    Calcula la señal de control usando los términos proporcional,
-    integral y derivativo del error.
+    Calcula la señal de control usando los términos proporcional, integral y derivativo del error.
     
     Args:
         kp: Ganancia proporcional
