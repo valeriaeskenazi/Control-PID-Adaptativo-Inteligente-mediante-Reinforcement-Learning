@@ -3,10 +3,11 @@ import numpy as np
 
 class ResponseTimeDetector:
     
-    def __init__(self, proceso, variable_index, env_type='simulation'):
+    def __init__(self, proceso, variable_index, env_type='simulation', dt=1.0):
         self.proceso = proceso
         self.variable_index = variable_index
         self.env_type = env_type
+        self.dt = dt
     
     def estimate(self, pv_inicial, sp, pid_controller, max_time=1800, tolerance=0.05):
         if self.env_type == 'simulation':
@@ -29,7 +30,6 @@ class ResponseTimeDetector:
         
         pv = pv_inicial
         t = 0
-        dt_sim = 1.0
         dead_band = tolerance * abs(sp - pv_inicial)
         
         # Simular hasta convergencia
@@ -45,12 +45,12 @@ class ResponseTimeDetector:
             pv = self.proceso.simulate_step(
                 control_output=control_output,
                 variable_index=self.variable_index,
-                dt=dt_sim
+                dt=self.dt
             )
             resultado['trayectoria_pv'].append(pv)
-            
-            t += dt_sim
-            
+
+            t += self.dt
+
             # Timeout
             if t >= max_time:
                 resultado['tiempo'] = max_time
@@ -79,7 +79,6 @@ class ResponseTimeDetector:
         }
         
         t = 0
-        dt_sample = 1.0
         dead_band = tolerance * abs(sp - pv_inicial)
         
         # Leer PV inicial
@@ -102,9 +101,9 @@ class ResponseTimeDetector:
             )
             
             # Esperar tiempo REAL
-            time.sleep(dt_sample)
-            t += dt_sample
-            
+            time.sleep(self.dt)
+            t += self.dt
+
             # Leer nuevo PV
             pv_actual = self.proceso.read_pv(self.variable_index)
             resultado['trayectoria_pv'].append(pv_actual)
