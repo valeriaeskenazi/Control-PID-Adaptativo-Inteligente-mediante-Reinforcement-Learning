@@ -80,18 +80,20 @@ class BasePIDControlEnv(gym.Env, ABC):
         self.error_prevs_target = [0.0] * self.n_target_vars
 
         ### tiempo de respuesta y dt (Detectores de tiempo solo para dinamicas controlables (PID))
+        self.dt_sim = config.get('dt_simulation', 1.0)  
+
         self.response_time_detectors = [
             ResponseTimeDetector(
                 proceso=self.proceso,
                 variable_index=i,
-                env_type=env_type
+                env_type=env_type,
+                dt=self.dt_sim  
             )
             for i in range(self.n_manipulable_vars)
         ]
 
         #### Valores dummy iniciales (se calculan en el primer step)
         self.tiempo_respuesta = None
-        self.dt = None
         self.step_duration = None
 
 
@@ -243,8 +245,6 @@ class BasePIDControlEnv(gym.Env, ABC):
             'accumulated_error_manipulable': self.accumulated_error_manipulable,  
             'accumulated_error_target': self.accumulated_error_target,            
             
-            # Tiempo del step (variable según paso limitante)
-            'step_duration': self.step_duration # Solo para el caso de ctrl, ya que el ajusta un PID
         }
         
         return info
