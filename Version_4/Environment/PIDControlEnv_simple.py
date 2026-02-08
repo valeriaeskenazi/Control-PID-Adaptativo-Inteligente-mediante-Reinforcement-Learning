@@ -5,8 +5,9 @@ from abc import ABC, abstractmethod
 from gymnasium import spaces
 from typing import Optional, Dict, Any, Tuple, List, Union
 
-from ..Aux.PIDComponents_PID import PIDController
+from ..Aux.PIDComponents_PID import PIDController 
 from ..Aux.PIDComponents_time import ResponseTimeDetector
+from ..Aux.PIDComponentes_translate import ApplyAction
 from .real_env import RealPIDEnv
 from .simulation_env import SimulationPIDEnv
 
@@ -186,6 +187,13 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                 2: 0    # Mantener
             }       
 
+        ## Componente para traducir acciones a parámetros de control
+        self.apply_action = ApplyAction(
+            delta_percent_ctrl=config.get('delta_percent_ctrl', 0.2),
+            delta_percent_orch=config.get('delta_percent_orch', 0.05),
+            pid_limits=config.get('pid_limits', None),
+            manipulable_ranges=self.manipulable_ranges
+        )
 
     def _get_observation(self):
                 
@@ -310,7 +318,13 @@ class PIDControlEnv_Simple(gym.Env, ABC):
     def step(self, action):
         
         # 1. TRADUCIR ACCION A PARAMETROS DE CONTROL
-        pid_params = self.apply_action.translate(action, 'ctrl', self.action_type)
+        self.action_type = self.agente_ctrl.get('agent_type', 'continuous')
+        pid_params = self.apply_action.translate(
+            action=action,
+            agent_type='ctrl',
+            action_type=self.action_type,
+            current_values=[(c.kp, c.ki, c.kd) for c in self.pid_controllers]
+        )
         # pid_params = [(kp1, ki1, kd1), (kp2, ki2, kd2), ...]
         
         # Actualizar parámetros de cada controlador
