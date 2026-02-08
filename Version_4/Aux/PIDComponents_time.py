@@ -3,19 +3,20 @@ import numpy as np
 
 class ResponseTimeDetector:
     
-    def __init__(self, proceso, variable_index, env_type='simulation', dt=1.0):
+    def __init__(self, proceso, variable_index, env_type='simulation', dt=1.0, tolerance=0.05):
         self.proceso = proceso
         self.variable_index = variable_index
         self.env_type = env_type
         self.dt = dt
-    
-    def estimate(self, pv_inicial, sp, pid_controller, max_time=1800, tolerance=0.05):
+        self.tolerance = tolerance
+
+    def estimate(self, pv_inicial, sp, pid_controller, max_time=1800):
         if self.env_type == 'simulation':
-            return self._estimate_from_simulation(pv_inicial, sp, pid_controller, max_time, tolerance)
+            return self._estimate_from_simulation(pv_inicial, sp, pid_controller, max_time)
         elif self.env_type == 'real':
-            return self._estimate_online(pv_inicial, sp, pid_controller, max_time, tolerance)
-    
-    def _estimate_from_simulation(self, pv_inicial, sp, pid_controller, max_time, tolerance):
+            return self._estimate_online(pv_inicial, sp, pid_controller, max_time)
+
+    def _estimate_from_simulation(self, pv_inicial, sp, pid_controller, max_time):
         # Resetear el PID
         pid_controller.reset()
         
@@ -30,7 +31,7 @@ class ResponseTimeDetector:
         
         pv = pv_inicial
         t = 0
-        dead_band = tolerance * abs(sp - pv_inicial)
+        dead_band = self.tolerance * abs(sp)
         
         # Simular hasta convergencia
         while abs(sp - pv) > dead_band:
@@ -64,8 +65,8 @@ class ResponseTimeDetector:
         resultado['converged'] = True
         
         return resultado
-    
-    def _estimate_online(self, pv_inicial, sp, pid_controller, max_time, tolerance):
+
+    def _estimate_online(self, pv_inicial, sp, pid_controller, max_time):
         # Resetear PID
         pid_controller.reset()
         
@@ -79,8 +80,8 @@ class ResponseTimeDetector:
         }
         
         t = 0
-        dead_band = tolerance * abs(sp - pv_inicial)
-        
+        dead_band = self.tolerance * abs(sp)
+
         # Leer PV inicial
         pv_actual = self.proceso.read_pv(self.variable_index)
         resultado['trayectoria_pv'].append(pv_actual)

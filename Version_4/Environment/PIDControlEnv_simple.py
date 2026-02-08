@@ -5,12 +5,12 @@ from abc import ABC, abstractmethod
 from gymnasium import spaces
 from typing import Optional, Dict, Any, Tuple, List, Union
 
-from ..Aux.pid_components import PIDController
-from ..Aux.pid_components_time import ResponseTimeDetector
+from ..Aux.PIDComponents_PID import PIDController
+from ..Aux.PIDComponents_time import ResponseTimeDetector
 from .real_env import RealPIDEnv
 from .simulation_env import SimulationPIDEnv
 
-class BasePIDControlEnv(gym.Env, ABC):
+class PIDControlEnv_Simple(gym.Env, ABC):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__()
@@ -29,7 +29,7 @@ class BasePIDControlEnv(gym.Env, ABC):
 
         ## Dinamica del ambiente
         self.pid_controllers = [
-            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=1.0)  # dt dummy, se actualiza en reset
+            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim)  
             for _ in range(self.n_manipulable_vars)
         ]    
         
@@ -80,21 +80,21 @@ class BasePIDControlEnv(gym.Env, ABC):
         self.error_prevs_target = [0.0] * self.n_target_vars
 
         ### tiempo de respuesta y dt (Detectores de tiempo solo para dinamicas controlables (PID))
-        self.dt_sim = config.get('dt_simulation', 1.0)  
+        self.dt_sim = config.get('dt_usuario', 1.0)  
 
         self.response_time_detectors = [
             ResponseTimeDetector(
                 proceso=self.proceso,
                 variable_index=i,
                 env_type=env_type,
-                dt=self.dt_sim  
+                dt=self.dt_sim,
+                tolerance=0.02  
             )
             for i in range(self.n_manipulable_vars)
         ]
 
-        #### Valores dummy iniciales (se calculan en el primer step)
-        self.tiempo_respuesta = None
-        self.step_duration = None
+        #### Valor dummy iniciales (se calculan en el primer step)
+        self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
 
 
         #ESPACIO DE OBSERVACIONES
@@ -274,7 +274,7 @@ class BasePIDControlEnv(gym.Env, ABC):
 
         # DINAMICA DEL AMBIENTE
         self.pid_controllers = [
-            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=1.0)  # dt dummy, se actualiza en reset
+            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim)  
             for _ in range(self.n_manipulable_vars)
         ]
 
@@ -290,9 +290,7 @@ class BasePIDControlEnv(gym.Env, ABC):
         self.error_prevs_target = [0.0] * self.n_target_vars
 
         #TIEMPO
-        self.tiempo_respuesta = None
-        self.dt = None
-        self.step_duration = None
+        self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
 
         #VARIABLES DE INFO
         self.trajectory_manipulable = [[] for _ in range(self.n_manipulable_vars)]
@@ -309,115 +307,66 @@ class BasePIDControlEnv(gym.Env, ABC):
 
         return observation, info
 
-    def step(self, action) -> Tuple[np.ndarray, Union[float, List[float]], bool, bool, Dict[str, Any]]:
+    def step(self, action):
+        
+        # 1. TRADUCIR ACCION A PARAMETROS DE CONTROL
+        pid_params = self.apply_action.translate(action, 'ctrl', self.action_type)
+        # pid_params = [(kp1, ki1, kd1), (kp2, ki2, kd2), ...]
+        
+        # Actualizar parámetros de cada controlador
+        for i, (kp, ki, kd) in enumerate(pid_params):
+            self.pid_controllers[i].kp = kp
+            self.pid_controllers[i].ki = ki
+            self.pid_controllers[i].kd = kd
 
-        # 1. Aplicar control
-        control_outputs, pid_params_list = self._apply_control(action)
         
-        # 2. Actualizar proceso
-        self.pvs = self._update_process(control_outputs, pid_params_list)
-        
-        # 3. Calcular errores para cada variable
-        errors = [self.setpoints[i] - self.pvs[i] for i in range(self.n_variables)]
-        
-        # 4. Actualizar tracking de errores
-        for i in range(self.n_variables):
-            self.error_histories[i].append(errors[i])
-            self.error_integrals[i] += errors[i] * self.dt
-            
-            # Calcular derivada
-            if len(self.error_histories[i]) >= 2:
-                self.error_derivatives[i] = (
-                    (self.error_histories[i][-1] - self.error_histories[i][-2]) / self.dt
-                )
-            else:
-                self.error_derivatives[i] = 0.0
-        
-        # 5. Detectar tiempo de respuesta y clasificar dificultad para cada variable
-        estimated_response_times = []
-        process_difficulties = []
-        
-        for i in range(self.n_variables):
-            control_out = control_outputs[i] if control_outputs[i] is not None else 0.0
-            
-            estimated_rt = self.response_detectors[i].update(
-                control_out, self.pvs[i], self.setpoints[i], self.dt
+        # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector hace toda la simulación)
+        for i in range(self.n_manipulable_vars):
+            resultado = self.response_time_detectors[i].estimate(
+                pv_inicial=self.manipulable_pvs[i],
+                sp=self.manipulable_setpoints[i],
+                pid_controller=self.pid_controllers[i]
             )
-            estimated_response_times.append(estimated_rt)
             
-            difficulty = self.difficulty_classifiers[i].classify(estimated_rt)
-            process_difficulties.append(difficulty)
-        
-        # 6. Calcular recompensas individuales para cada variable
-        individual_rewards = []
-        
-        for i in range(self.n_variables):
-            control_out = control_outputs[i] if control_outputs[i] is not None else 0.0
+            # Guardar resultados
+            self.tiempo_respuesta[i] = resultado['tiempo']  # ← Para reward
+            self.trajectory_manipulable[i] = resultado['trayectoria_pv']
+            self.manipulable_pvs[i] = resultado['pv_final']
             
-            reward_i = self.reward_calculators[i].calculate(
-                pv=self.pvs[i],
-                setpoint=self.setpoints[i],
-                error=errors[i],
-                error_integral=self.error_integrals[i],
-                error_derivative=self.error_derivatives[i],
-                control_output=control_out,
-                process_difficulty=process_difficulties[i]
-            )
-            individual_rewards.append(reward_i)
-            
-            # Actualizar métricas por variable
-            self.metrics_trackers[i].update_step(reward_i)
+            # Calcular métricas de esta variable
+            self._calculate_variable_metrics(i, resultado) # ← Para info
         
-        # 7. Calcular bonus de cooperación (si todas las variables están en banda muerta)
-        all_in_deadband = all(
-            abs(errors[i]) <= self.dead_bands[i] 
-            for i in range(self.n_variables)
-        )
+        # 3. ACTUALIZAR ERRORES
+        self._update_errors()
         
-        if all_in_deadband and self.n_variables > 1:
-            cooperation_bonus = self.cooperation_bonus
-        else:
-            cooperation_bonus = 0.0
+        # 4. CALCULAR RECOMPENSA (usa self.tiempo_respuesta)
+        reward = self._calculate_reward()
         
-        # 8. Recompensas finales (individuales + bonus cooperativo)
-        final_rewards = [r + cooperation_bonus for r in individual_rewards]
+        # 5. DETERMINAR TERMINACIÓN
+        terminated = self._check_terminated()
+        truncated = self._check_truncated()
         
-        # 9. Actualizar estado
-        self.error_prevs = errors.copy()
-        self.step_count += 1
+        # 6. OBTENER OBSERVACIÓN E INFO
+        observation = self._get_observation()
+        info = self._get_info()
         
-        # 10. Condiciones de término
-        terminated = self.step_count >= self.max_episode_steps
-        
-        # Truncar si alguna variable se sale de control
-        truncated = any(
-            self._check_truncation(i, errors[i], process_difficulties[i])
-            for i in range(self.n_variables)
-        )
-        
-        # 11. Preparar info
-        info = {
-            'process_difficulties': process_difficulties,
-            'estimated_response_times': estimated_response_times,
-            'step_count': self.step_count,
-            'cooperation_bonus': cooperation_bonus,
-            'all_in_deadband': all_in_deadband,
-            'individual_rewards': individual_rewards,
-            'current_pvs': self.pvs.copy(),  # ✅ AGREGAR ESTA LÍNEA
-            'setpoints': self.setpoints.copy()  # ✅ Y ESTA
+        return observation, reward, terminated, truncated, info
+    
+    def _update_errors(self):
+
+        self.dt = self.dt_sim
+
+        # Actualizar errores para variables manipulables
+        for i in range(self.n_manipulable_vars):
+            error = self.manipulable_setpoints[i] - self.manipulable_pvs[i]
+            self.error_manipulable[i] = error
+            self.error_integral_manipulable[i] += error * self.dt
+            self.error_derivative_manipulable[i] = (error - self.error_prevs_manipulable[i]) / self.dt if self.dt > 0 else 0.0
+            self.error_prevs_manipulable[i] = error
+
+        return {
+            'error_manipulable': self.error_manipulable,
+            'error_integral_manipulable': self.error_integral_manipulable,
+            'error_derivative_manipulable': self.error_derivative_manipulable,
+            'error_prevs_manipulable': self.error_prevs_manipulable
         }
-        
-        # Agregar info específico si aplica
-        if any(p is not None for p in pid_params_list):
-            info['pid_params_list'] = pid_params_list
-        if any(c is not None for c in control_outputs):
-            info['control_outputs'] = [float(c) if c is not None else None 
-                                       for c in control_outputs]
-        
-        # Formato de recompensa según modo
-        if self.n_variables == 1:
-            reward_output = final_rewards[0]  # Escalar para single-agent
-        else:
-            reward_output = final_rewards  # Lista para multi-agent
-        
-        return self._get_observation(), reward_output, terminated, truncated, info    
