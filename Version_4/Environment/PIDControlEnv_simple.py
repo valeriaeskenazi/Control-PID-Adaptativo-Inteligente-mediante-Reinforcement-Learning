@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, Tuple, List, Union
 from ..Aux.PIDComponents_PID import PIDController 
 from ..Aux.PIDComponents_time import ResponseTimeDetector
 from ..Aux.PIDComponentes_translate import ApplyAction
+from ..Aux.PIDComponents_Reward import RewardCalculator
 from .real_env import RealPIDEnv
 from .simulation_env import SimulationPIDEnv
 
@@ -195,6 +196,17 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             manipulable_ranges=self.manipulable_ranges
         )
 
+        # ENTRENAMIENTO
+        self.max_steps = config.get('max_steps', 20)
+        self.current_step = 0
+
+        ## Recompensa
+        self.reward_calculator = RewardCalculator(
+            weights=config.get('reward_weights', None),
+            manipulable_ranges=self.manipulable_ranges,
+            dead_band=config.get('reward_dead_band', 0.02)
+        )
+            
     def _get_observation(self):
                 
         if self.architecture == 'simple':
@@ -309,6 +321,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         self.accumulated_error_manipulable = [0.0] * self.n_manipulable_vars
         self.accumulated_error_target = [0.0] * self.n_target_vars
 
+        # VARIABLES DE ENTRENAMIENTO
+        self.current_step = 0
+
         # OBSERVACION E INFO
         observation = self._get_observation()
         info = self._get_info() 
@@ -335,20 +350,22 @@ class PIDControlEnv_Simple(gym.Env, ABC):
 
         
         # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector hace toda la simulación)
+        energy_step = 0.0  # ← Inicializar
+    
         for i in range(self.n_manipulable_vars):
-            resultado = self.response_time_detectors[i].estimate(
-                pv_inicial=self.manipulable_pvs[i],
-                sp=self.manipulable_setpoints[i],
-                pid_controller=self.pid_controllers[i]
-            )
+            resultado = self.response_time_detectors[i].estimate(...)
             
             # Guardar resultados
-            self.tiempo_respuesta[i] = resultado['tiempo']  # ← Para reward
+            self.tiempo_respuesta[i] = resultado['tiempo']
             self.trajectory_manipulable[i] = resultado['trayectoria_pv']
             self.manipulable_pvs[i] = resultado['pv_final']
             
-            # Calcular métricas de esta variable
-            self._calculate_variable_metrics(i, resultado) # ← Para info
+            # Acumular energía de ESTE step
+            if 'trayectoria_control' in resultado:
+                energy_step += sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
+            
+            # Calcular métricas para info
+            self._calculate_variable_metrics(i, resultado)
         
         # 3. ACTUALIZAR ERRORES
         self._update_errors()
@@ -364,6 +381,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         observation = self._get_observation()
         info = self._get_info()
         
+        # 7. INCREMENTAR STEP
+        self.current_step += 1
+
         return observation, reward, terminated, truncated, info
     
     def _update_errors(self):
@@ -384,3 +404,60 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             'error_derivative_manipulable': self.error_derivative_manipulable,
             'error_prevs_manipulable': self.error_prevs_manipulable
         }
+    
+    def _check_truncated(self) -> bool:
+        # Episodio se trunca si alcanza max_steps
+        return self.current_step >= self.max_steps
+    
+    def _check_terminated(self) -> bool:
+        threshold = 0.02  # 2% de error relativo
+        
+        # Éxito: todas las variables dentro del threshold
+        errors_relativo = [
+            abs(pv - sp) / abs(sp) if sp != 0 else abs(pv - sp)
+            for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)
+        ]
+        success = all(error < threshold for error in errors_relativo)
+        
+        # Fallo: alguna variable fuera de rango físico
+        failure = any(
+            pv < rango[0] or pv > rango[1]
+            for pv, rango in zip(self.manipulable_pvs, self.manipulable_ranges)
+        )
+        
+        return success or failure
+
+    def _calculate_variable_metrics(self, var_idx: int, resultado: dict):
+        trayectoria = resultado['trayectoria_pv']
+        sp = self.manipulable_setpoints[var_idx]
+        
+        # 1. Overshoot (máximo pico sobre SP, en porcentaje)
+        max_pv = max(trayectoria)
+        if max_pv > sp:
+            self.overshoot_manipulable[var_idx] = (max_pv - sp) / sp * 100
+        else:
+            self.overshoot_manipulable[var_idx] = 0.0
+        
+        # 2. Error acumulado (integral del error absoluto)
+        accumulated_error = sum(abs(pv - sp) for pv in trayectoria) * self.dt_sim
+        self.accumulated_error_manipulable[var_idx] = accumulated_error
+        
+        # 3. Energía (esfuerzo de control)
+        if 'trayectoria_control' in resultado:
+            energy = sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
+            self.energy_accumulated += energy    
+
+    def _calculate_reward(self, energy_step, terminated, truncated) -> float:
+        
+        errors = [abs(pv - sp) for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)]
+        
+        return self.reward_calculator.calculate(
+            errors=errors,
+            tiempos_respuesta=self.tiempo_respuesta,
+            overshoots=self.overshoot_manipulable,
+            energy_step=energy_step,
+            pvs=self.manipulable_pvs,
+            setpoints=self.manipulable_setpoints,
+            terminated=terminated,
+            truncated=truncated
+        )  
