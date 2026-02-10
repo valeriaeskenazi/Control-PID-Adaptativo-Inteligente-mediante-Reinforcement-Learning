@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 import random
-from abc import ABC, abstractmethod
+from abc import ABC
 from gymnasium import spaces
 from typing import Optional, Dict, Any, Tuple, List, Union
 
@@ -9,8 +9,7 @@ from ..Aux.PIDComponents_PID import PIDController
 from ..Aux.PIDComponents_time import ResponseTimeDetector
 from ..Aux.PIDComponentes_translate import ApplyAction
 from ..Aux.PIDComponents_Reward import RewardCalculator
-from .real_env import RealPIDEnv
-from .simulation_env import SimulationPIDEnv
+from .Simulation_Env.SimulationEnv import SimulationPIDEnv
 
 class PIDControlEnv_Simple(gym.Env, ABC):
 
@@ -20,7 +19,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         #CONFIGURACION DEL AMBIENTE
 
         ##Arquitectura
-        self.architecture = config.get('architecture', 'jerarquica')  # 'simple' o 'jerairquica'
+        self.architecture = config.get('architecture', 'Simple')  # 'Simple' o 'Jerarquica'
 
         ##Tipo de entorno
         env_type = config.get('env_type', 'simulation')
@@ -448,7 +447,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             self.energy_accumulated += energy    
 
     def _calculate_reward(self, energy_step, terminated, truncated) -> float:
-        
+
         errors = [abs(pv - sp) for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)]
         
         return self.reward_calculator.calculate(
