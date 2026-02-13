@@ -53,9 +53,12 @@ class ApplyAction:
             n_vars = len(current_values)
             new_params = []
             
+            # Reshape flat array a tuplas
+            action_reshaped = action.reshape(n_vars, 3)
+
             for i in range(n_vars):
-                delta_kp, delta_ki, delta_kd = action[i]
-                
+                delta_kp, delta_ki, delta_kd = action_reshaped[i]
+
                 # Aplicar deltas
                 kp_new = current_values[i][0] + delta_kp
                 ki_new = current_values[i][1] + delta_ki
@@ -106,7 +109,7 @@ class ApplyAction:
             new_sps = []
             
             for i in range(n_vars):
-                delta_sp = action[i][0]  # Extraer de la tupla
+                delta_sp = action[i] 
                 sp_new = current_values[i] + delta_sp
                 
                 # Clipear con manipulable_ranges
