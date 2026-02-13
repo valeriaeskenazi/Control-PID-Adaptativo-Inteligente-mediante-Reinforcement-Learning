@@ -5,19 +5,18 @@ import numpy as np
 
 
 class AbstractPIDAgent(ABC):
-    """
-    Todos los agentes RL (PPO, DQN, SAC, etc.) deben heredar de esta clase.
-    """
-    
+
     def __init__(
         self,
-        state_dim: int = 6, # 6 dimensiones de estado [PV, setpoint, error, error_prev, error_integral, error_derivative]
-        action_dim: int = 7,  # 7 acciones discretas para DeltaPIDActionSpace, 1 tupla del tipo (kp,ki,kd) para control directo
+        state_dim: int,
+        action_dim: Union[int, Tuple],
+        agent_type: str,  # 'ctrl' o 'orch'
         device: str = 'cpu',
         seed: Optional[int] = None
     ):
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.agent_type = agent_type 
         self.device = torch.device(device)
         
         if seed is not None:
@@ -32,98 +31,64 @@ class AbstractPIDAgent(ABC):
         state: np.ndarray,          
         training: bool = True
     ) -> Union[int, np.ndarray]:
-        """
-        Args:
-            state: Estado actual [PV, setpoint, error, error_prev, error_integral, error_derivative]
-            training: Indica si el agente está en modo entrenamiento (True) o evaluación (False)
-        
-        Devuelve:
-            action: 
-                - int: índice de acción discreta (0-6) para agentes value-based en modo 'pid_tuning'
-                - np.ndarray: acción continua para agentes policy-based en modo 'direct'
-        """
         pass
     
     @abstractmethod
     def update(self, batch_data: Dict[str, Any]) -> Dict[str, float]:
-        """
-        Actualiza los parámetros del agente usando un lote de experiencias.
-        
-        Args:
-            batch_data: Diccionario con datos del lote.
-                       Debe incluir: states, actions, rewards, next_states, dones
-        
-        Devuelve:
-            metrics: Diccionario con métricas de entrenamiento (pérdidas, etc.)
-        """
         pass
     
     @abstractmethod
     def save(self, filepath: str) -> None:
-        """Guardar el estado del agente en un archivo."""
         pass
     
     @abstractmethod
     def load(self, filepath: str) -> None:
-        """Cargar el estado del agente desde un archivo."""
         pass
     
     def set_seed(self, seed: int) -> None:
-        """Para reproducibilidad."""
         torch.manual_seed(seed)
         np.random.seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
     
-    def preprocess_state(self, state: np.ndarray) -> torch.Tensor:
-        """ Procesa el estado antes de pasarlo a la red neuronal."""
-        # Convertir a tensor y mover a dispositivo
-        if isinstance(state, np.ndarray):
-            state_tensor = torch.FloatTensor(state).to(self.device)
-        else:
-            state_tensor = state.to(self.device)
-        
-        # Agregar dimensión de batch si es necesario
-        if len(state_tensor.shape) == 1:
-            state_tensor = state_tensor.unsqueeze(0)
-        
-        return state_tensor # Shape: (1, state_dim)
-    
-    def postprocess_action(self, action: torch.Tensor) -> Union[int, np.ndarray]:
-        """Procesa la salida de la red neuronal para obtener la acción final. """
+    def postprocess_action(self, action: torch.Tensor) -> np.ndarray:
+        # Convierte tensor a numpy array
         if isinstance(action, torch.Tensor):
             action = action.detach().cpu().numpy()
         
-        # Sacar dimensión de batch si es necesario
+        # Remover batch dimension
         if len(action.shape) == 2 and action.shape[0] == 1:
             action = action.squeeze(0)
         
-        # Si es acción discreta (un solo valor entero)
-        if action.shape == () or (len(action.shape) == 1 and action.shape[0] == 1):
-            return int(action)
-        
-        # Si es acción continua
-        return action
+        return action  
     
+    def postprocess_action(self, action: torch.Tensor) -> np.ndarray:
+        if isinstance(action, torch.Tensor):
+            action = action.detach().cpu().numpy()
+        
+        # Remover batch dimension si existe
+        if len(action.shape) == 2 and action.shape[0] == 1:
+            action = action.squeeze(0)
+        
+        # Asegurar que sea al menos 1D (no scalar)
+        if action.shape == ():
+            action = action.reshape(1)
+
+        return action  # Siempre devuelve np.ndarray consistente con PIDComponents_translate
+
     def get_training_info(self) -> Dict[str, Any]:
-        """Devolver la información de entrenamiento actual del agente."""
         return {
             'training_step': self.training_step,
             'episode_count': self.episode_count,
             'device': str(self.device),
             'state_dim': self.state_dim,
-            'action_dim': self.action_dim
+            'action_dim': self.action_dim,
+            'agent_type': self.agent_type
         }
 
 
 class AbstractPolicyGradientAgent(AbstractPIDAgent):
-    """
-    Abstract base class for policy gradient agents (PPO, A2C, REINFORCE, etc.).
-    
-    Extends AbstractPIDAgent with policy gradient specific methods.
-    Estos agentes típicamente usan acciones continuas.
-    """
-    
+
     @abstractmethod
     def compute_policy_loss(self, states: torch.Tensor, actions: torch.Tensor, 
                            advantages: torch.Tensor) -> torch.Tensor:
@@ -137,13 +102,7 @@ class AbstractPolicyGradientAgent(AbstractPIDAgent):
 
 
 class AbstractValueBasedAgent(AbstractPIDAgent):
-    """
-    Abstract base class for value-based agents (DQN, DDQN, etc.).
-    
-    Estos agentes usan acciones discretas (índices 0-6 para DeltaPIDActionSpace).
-    Implementan epsilon-greedy para exploración.
-    """
-    
+
     def __init__(
         self,
         state_dim: int = 6,
