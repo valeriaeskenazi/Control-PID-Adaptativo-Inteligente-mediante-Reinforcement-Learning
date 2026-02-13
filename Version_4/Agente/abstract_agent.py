@@ -90,38 +90,43 @@ class AbstractPIDAgent(ABC):
 class AbstractPolicyGradientAgent(AbstractPIDAgent):
 
     @abstractmethod
-    def compute_policy_loss(self, states: torch.Tensor, actions: torch.Tensor, 
-                           advantages: torch.Tensor) -> torch.Tensor:
-        """Compute policy gradient loss."""
+    def compute_policy_loss(
+        self, 
+        states: torch.Tensor, 
+        actions: torch.Tensor, 
+        advantages: torch.Tensor
+    ) -> torch.Tensor:
         pass
     
     @abstractmethod
-    def compute_value_loss(self, states: torch.Tensor, returns: torch.Tensor) -> torch.Tensor:
-        """Compute value function loss."""
+    def compute_value_loss(
+        self, 
+        states: torch.Tensor, 
+        returns: torch.Tensor
+    ) -> torch.Tensor:
         pass
 
 
 class AbstractValueBasedAgent(AbstractPIDAgent):
-
     def __init__(
         self,
-        state_dim: int = 6,
-        action_dim: int = 7,  # 7 acciones discretas
+        state_dim: int,           
+        action_dim: int,          
+        agent_type: str,          
         device: str = 'cpu',
         seed: Optional[int] = None,
         epsilon_start: float = 1.0,
         epsilon_min: float = 0.01,
         epsilon_decay: float = 0.995
     ):
-        """
-        Initialize value-based agent with epsilon-greedy parameters.
-        
-        Args:
-            epsilon_start: Initial exploration rate
-            epsilon_min: Minimum exploration rate  
-            epsilon_decay: Decay factor per step
-        """
-        super().__init__(state_dim, action_dim, device, seed)
+       
+        super().__init__(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            agent_type=agent_type,  # ← AGREGAR
+            device=device,
+            seed=seed
+        )
         
         # Epsilon-greedy exploration parameters
         self.epsilon = epsilon_start
@@ -129,41 +134,34 @@ class AbstractValueBasedAgent(AbstractPIDAgent):
         self.epsilon_decay = epsilon_decay
     
     def update_epsilon(self) -> None:
-        """Update epsilon using exponential decay."""
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
     
     def get_epsilon(self) -> float:
-        """Get current exploration epsilon."""
         return self.epsilon
     
     def reset_epsilon(self, epsilon_start: float = 1.0) -> None:
-        """Reset epsilon to initial value."""
         self.epsilon = epsilon_start
     
     @abstractmethod
-    def compute_q_loss(self, states: torch.Tensor, actions: torch.Tensor,
-                       rewards: torch.Tensor, next_states: torch.Tensor,
-                       dones: torch.Tensor) -> torch.Tensor:
-        """Compute Q-learning loss."""
+    def compute_q_loss(
+        self, 
+        states: torch.Tensor, 
+        actions: torch.Tensor,
+        rewards: torch.Tensor, 
+        next_states: torch.Tensor,
+        dones: torch.Tensor
+    ) -> torch.Tensor:
         pass
 
 
 class AbstractActorCriticAgent(AbstractPIDAgent):
-    """
-    Abstract base class for actor-critic agents (DDPG, TD3, SAC, etc.).
-    
-    Extends AbstractPIDAgent with actor-critic specific methods.
-    Estos agentes típicamente usan acciones continuas.
-    """
-    
+
     @abstractmethod
     def compute_actor_loss(self, states: torch.Tensor) -> torch.Tensor:
-        """Compute actor network loss."""
         pass
     
     @abstractmethod
     def compute_critic_loss(self, states: torch.Tensor, actions: torch.Tensor,
                            rewards: torch.Tensor, next_states: torch.Tensor,
                            dones: torch.Tensor) -> torch.Tensor:
-        """Compute critic network loss.""" 
         pass
