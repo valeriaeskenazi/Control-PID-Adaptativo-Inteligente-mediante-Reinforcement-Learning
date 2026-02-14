@@ -10,6 +10,10 @@ class TankSimulator:
         dh/dt = (Qin - Qout) / A
         Qout = Cv * sqrt(h)
     
+    Variables:
+        - Estado: height (nivel del tanque)
+        - Control: flow_in (caudal de entrada)
+    
     Args:
         area: Área de la sección transversal del tanque [m²]
         cv: Coeficiente de descarga de la válvula [m^2.5/s]
@@ -37,11 +41,24 @@ class TankSimulator:
         self.height = 0.0
         self.flow_in = 0.0
     
-    def step(self, control_output: float, setpoint: float) -> float:
-        # Convertir control_output (-1, 1) a caudal de entrada
-        # control_output = 0 → 50% del caudal máximo (punto medio)
-        # control_output = 1 → 100% del caudal máximo
-        # control_output = -1 → 0% del caudal máximo
+    def get_n_variables(self) -> int:
+        """Número de variables manipulables (solo height)."""
+        return 1
+    
+    def get_initial_pvs(self) -> list:
+        """Retorna lista con PV inicial."""
+        initial_height = np.random.uniform(0.2 * self.max_height, 0.8 * self.max_height)
+        return [initial_height]
+    
+    def step(self, control_output: float) -> dict:
+        """
+        Args:
+            control_output: Caudal normalizado (-1, 1)
+                -1 → 0% del caudal máximo
+                 0 → 50% del caudal máximo  
+                +1 → 100% del caudal máximo
+        """
+        # Desnormalizar control_output a caudal real
         self.flow_in = self.max_flow_in * (0.5 + 0.5 * control_output)
         self.flow_in = np.clip(self.flow_in, 0.0, self.max_flow_in)
         
@@ -58,49 +75,45 @@ class TankSimulator:
         # Limitar altura entre 0 y max_height
         self.height = np.clip(self.height, 0.0, self.max_height)
         
-        return self.height
+        # Agregar ruido de medición (simula sensor real)
+        height_measured = self.height + np.random.uniform(-0.01, 0.01)
+        
+        return {
+            'height': height_measured,
+            'flow_in': self.flow_in,
+            'flow_out': flow_out
+        }
     
     def simulate_step(
         self,
         control_output: float,
         variable_index: int,
         dt: float
-    ) -> float:
-
+        ) -> float:
         # Guardar dt original
         dt_original = self.dt
         self.dt = dt
         
-        # Aplicar límites al control_output
-        self.flow_in = self.max_flow_in * (0.5 + 0.5 * control_output)
-        self.flow_in = np.clip(self.flow_in, 0.0, self.max_flow_in)
-        
-        # Ejecutar step del simulador (actualiza self.state internamente)
-        result = self.step(control_output=self.flow_in, setpoint=None)
+        # Ejecutar step del simulador
+        state = self.step(control_output=control_output)
         
         # Restaurar dt original
         self.dt = dt_original
         
-        # Retornar el NUEVO PV
-        return result[variable_index]
+        # Retornar height (única variable)
+        return state['height']
     
-    def get_initial_pv(self) -> float:
-        # Inicializar en un nivel aleatorio entre 20% y 80% de la altura máxima
-        self.height = np.random.uniform(0.2 * self.max_height, 0.8 * self.max_height)
-        self.flow_in = 0.0
-        
-        return self.height
-    
-    def reset(self, initial_height: Optional[float] = None) -> float:
+    def reset(self, initial_height: Optional[float] = None) -> list:
+       
         if initial_height is not None:
             self.height = np.clip(initial_height, 0.0, self.max_height)
         else:
-            self.height = self.get_initial_pv()
+            self.height = np.random.uniform(0.2 * self.max_height, 0.8 * self.max_height)
         
         self.flow_in = 0.0
         
-        return self.height
-
+        return [self.height]
+    
     def get_state(self) -> dict:
         flow_out = self.cv * np.sqrt(self.height) if self.height > 0 else 0.0
         
@@ -109,5 +122,7 @@ class TankSimulator:
             'flow_in': self.flow_in,
             'flow_out': flow_out,
             'area': self.area,
-            'cv': self.cv
+            'cv': self.cv,
+            'max_height': self.max_height,
+            'max_flow_in': self.max_flow_in
         }
