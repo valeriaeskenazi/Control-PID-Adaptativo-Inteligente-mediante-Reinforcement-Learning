@@ -25,8 +25,8 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         env_type = config.get('env_type', 'simulation')
         if env_type == 'simulation':
             self.proceso = SimulationPIDEnv(config.get('env_type_config', {}))
-        elif env_type == 'real':
-            self.proceso = RealPIDEnv(config.get('env_type_config', {}))
+        #elif env_type == 'real':
+        #    self.proceso = RealPIDEnv(config.get('env_type_config', {}))
 
         ## Dinamica del ambiente
         self.pid_controllers = [
