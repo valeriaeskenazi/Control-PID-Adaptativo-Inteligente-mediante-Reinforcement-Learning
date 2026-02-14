@@ -16,74 +16,42 @@ PolicyExperience = namedtuple('PolicyExperience', [
     'state', 'action', 'reward', 'next_state', 'done', 'log_prob', 'value'
 ])
 
-# PID-specific experience with process metadata
-PIDExperience = namedtuple('PIDExperience', [
-    'state', 'action', 'reward', 'next_state', 'done', 
-    'process_difficulty', 'setpoint', 'pv', 'error'
-])
-
-
 class AbstractReplayBuffer(ABC):
-    """
-    Abstract base class for all replay buffers.
-    
-    Defines the interface that all buffers must implement.
-    """
     
     def __init__(self, capacity: int, device: str = 'cpu'):
-        """
-        Initialize buffer.
-        
-        Args:
-            capacity: Maximum number of experiences to store
-            device: Device to store tensors on
-        """
         self.capacity = capacity
         self.device = torch.device(device)
         self.size = 0
     
     @abstractmethod
-    def add(self, experience: Union[Experience, PolicyExperience, PIDExperience]) -> None:
-        """Add experience to buffer."""
+    def add(self, experience: Union[Experience, PolicyExperience]) -> None:
         pass
     
     @abstractmethod
     def sample(self, batch_size: int) -> Dict[str, torch.Tensor]:
-        """Sample batch of experiences."""
         pass
     
     @abstractmethod
     def clear(self) -> None:
-        """Clear all experiences from buffer."""
         pass
     
     def __len__(self) -> int:
-        """Return current buffer size."""
         return self.size
     
     def is_ready(self, min_size: int) -> bool:
-        """Check if buffer has enough samples for training."""
         return self.size >= min_size
 
 
 class SimpleReplayBuffer(AbstractReplayBuffer):
-    """
-    Simple replay buffer for DQN-style algorithms.
-    
-    Stores experiences in a circular buffer and samples uniformly.
-    """
-    
     def __init__(self, capacity: int = 100000, device: str = 'cpu'):
         super().__init__(capacity, device)
         self.buffer = deque(maxlen=capacity)
     
     def add(self, experience: Experience) -> None:
-        """Add experience to buffer."""
         self.buffer.append(experience)
         self.size = len(self.buffer)
     
     def sample(self, batch_size: int) -> Dict[str, torch.Tensor]:
-        """Sample random batch of experiences."""
         if batch_size > self.size:
             batch_size = self.size
         
@@ -91,7 +59,13 @@ class SimpleReplayBuffer(AbstractReplayBuffer):
         
         # Convert to tensors
         states = torch.FloatTensor(np.array([e.state for e in batch])).to(self.device)
-        actions = torch.FloatTensor(np.array([e.action for e in batch])).to(self.device)
+        
+        actions_np = np.array([e.action for e in batch])
+        if actions_np.dtype in [np.int32, np.int64]:
+            actions = torch.LongTensor(actions_np).to(self.device)
+        else:
+            actions = torch.FloatTensor(actions_np).to(self.device)
+
         rewards = torch.FloatTensor(np.array([e.reward for e in batch])).to(self.device)
         next_states = torch.FloatTensor(np.array([e.next_state for e in batch])).to(self.device)
         dones = torch.BoolTensor(np.array([e.done for e in batch])).to(self.device)
@@ -105,18 +79,17 @@ class SimpleReplayBuffer(AbstractReplayBuffer):
         }
     
     def clear(self) -> None:
-        """Clear buffer."""
         self.buffer.clear()
         self.size = 0
 
-#Priority Replay Buffer Implementation, adapted from original paper
+#Priority Replay Buffer Implementation, adaptacion del paper original de Prioritized Experience Replay (Schaul et al., 2015)
 class SumTree:
     def __init__(self, capacity):
         self.capacity = capacity
         self.tree = np.zeros(2 * capacity - 1)  # Tamaño del árbol binario completo
-        self.data = np.zeros(capacity, dtype=object)  # Aquí guardamos las experiencias
+        self.data = np.zeros(capacity, dtype=object)  # Almacenar las experiencias
         self.write = 0  # Puntero circular para escribir
-        self.n_entries = 0  # Cuántas entradas tenemos
+        self.n_entries = 0  # Cuántas entradas tengo
 
     def _propagate(self, idx, change):
         parent = (idx - 1) // 2  # Índice del padre
@@ -178,12 +151,14 @@ class PriorityReplayBuffer(AbstractReplayBuffer):
         
         self.tree = SumTree(capacity)
         self.epsilon = 1e-6
+        self.max_priority = 1.0
 
     def add(self, experience: Experience, td_error: float = None) -> None:
         if td_error is None:
-            priority = self.tree.max_priority if self.tree.n_entries > 0 else 1.0
+            priority = self.max_priority 
         else:
-            priority = abs(td_error) + self.epsilon
+            priority = (abs(td_error) + self.epsilon) ** self.alpha
+            self.max_priority = max(self.max_priority, priority)
         
         self.tree.add(priority, experience)
         self.size = self.tree.n_entries
@@ -205,14 +180,20 @@ class PriorityReplayBuffer(AbstractReplayBuffer):
             indices.append(idx)
             priorities.append(priority)
         
-        # Calculate importance sampling weights
+        # Probabilidades de muestreo y pesos de importancia
         sampling_probabilities = np.array(priorities) / self.tree.total()
         weights = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
         weights /= weights.max()
+
+        # Manejar acciones discretas y continuas
+        states = torch.FloatTensor(np.array([e.state for e in batch])).to(self.device)
         
-        # Convert to tensors
-        states = torch.FloatTensor([e.state for e in batch]).to(self.device)
-        actions = torch.FloatTensor([e.action for e in batch]).to(self.device)
+        actions_np = np.array([e.action for e in batch])
+        if actions_np.dtype in [np.int32, np.int64]:
+            actions = torch.LongTensor(actions_np).to(self.device)
+        else:
+            actions = torch.FloatTensor(actions_np).to(self.device)
+
         rewards = torch.FloatTensor([e.reward for e in batch]).to(self.device)
         next_states = torch.FloatTensor([e.next_state for e in batch]).to(self.device)
         dones = torch.BoolTensor([e.done for e in batch]).to(self.device)
@@ -233,5 +214,11 @@ class PriorityReplayBuffer(AbstractReplayBuffer):
 
     def update_priorities(self, indices: np.ndarray, td_errors: np.ndarray) -> None:
         for idx, td_error in zip(indices, td_errors):
-            priority = abs(td_error) + self.epsilon
-            self.tree.update(idx, priority)        
+            priority = (abs(td_error) + self.epsilon) ** self.alpha
+            self.max_priority = max(self.max_priority, priority)
+            self.tree.update(idx, priority)     
+
+    def clear(self) -> None:
+        self.tree = SumTree(self.capacity)
+        self.size = 0
+        self.max_priority = 1.0           
