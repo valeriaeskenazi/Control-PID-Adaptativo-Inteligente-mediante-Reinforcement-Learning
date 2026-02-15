@@ -110,35 +110,39 @@ class DQNAgent(AbstractValueBasedAgent):
         batch = self.memory.sample(self.batch_size)
         
         states = batch['states']
-        actions = batch['actions'].long()
+        actions = batch['actions'].long()  # (batch, n_vars)
         rewards = batch['rewards']
         next_states = batch['next_states']
         dones = batch['dones']
         
-        # Calcular Q-values actuales (CON gradientes)
-        current_q = self.q_network(states).gather(1, actions.unsqueeze(1)).squeeze()
-        
-        # Calcular Q-values objetivo (SIN gradientes)
-        with torch.no_grad():
-            next_q = self.target_network(next_states).max(1)[0]
-            target_q = rewards + (self.gamma * next_q * ~dones)
+        # Usar compute_q_loss nuevo
+        loss = self.compute_q_loss(states, actions, rewards, next_states, dones)
         
         # PARA PRIORITY BUFFER: calcular TD errors
         if 'weights' in batch:
             weights = batch['weights']
             
-            # Loss ponderado por importancia
-            td_errors_tensor = current_q - target_q  # CON gradientes para backprop
+            # Q-values actuales
+            q_values = self.q_network(states)  # (batch, n_vars, n_actions)
+            actions_unsqueezed = actions.unsqueeze(-1)
+            current_q = q_values.gather(2, actions_unsqueezed).squeeze(-1)
+            current_q_combined = current_q.mean(dim=1)
+            
+            # Q-values objetivo
+            with torch.no_grad():
+                next_q_values = self.target_network(next_states)
+                next_q_max = next_q_values.max(dim=2)[0]
+                next_q_combined = next_q_max.mean(dim=1)
+                target_q = rewards + (self.gamma * next_q_combined * ~dones)
+            
+            # TD errors para priority buffer
+            td_errors_tensor = current_q_combined - target_q
             loss = (weights * (td_errors_tensor ** 2)).mean()
             
-            # Actualizar prioridades (necesita detach para numpy)
+            # Actualizar prioridades
             if hasattr(self.memory, 'update_priorities'):
                 td_errors_np = td_errors_tensor.abs().detach().cpu().numpy()
                 self.memory.update_priorities(batch['indices'], td_errors_np)
-        
-        # PARA SIMPLE BUFFER
-        else:
-            loss = self.compute_q_loss(states, actions, rewards, next_states, dones)
         
         # Optimizar
         self.optimizer.zero_grad()
