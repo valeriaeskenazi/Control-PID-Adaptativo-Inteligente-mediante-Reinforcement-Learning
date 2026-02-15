@@ -21,16 +21,6 @@ class DQNTrainer:
         if self.architecture == 'simple':
             # PIDControlEnv_simple is a module; instantiate the class inside it
             self.env = PIDControlEnv_simple.PIDControlEnv_Simple(config['env_config'])
-            # Si el proceso del env no tiene external_process, intentar conectar un TankSimulator
-            try:
-                if getattr(self.env, 'proceso', None) is not None and getattr(self.env.proceso, 'external_process', None) is None:
-                    from Environment.Simulation_Env.tanque_simple import TankSimulator
-                    sim_cfg = config.get('env_config', {}).get('env_type_config', {}) or {}
-                    simulator = TankSimulator(**sim_cfg)
-                    self.env.proceso.connect_external_process(simulator)
-            except Exception as e:
-                import warnings
-                warnings.warn(f"No se pudo conectar TankSimulator en DQNTrainer: {e}")
         
         elif self.architecture == 'jerarquica':
             # PIDControlEnv_complex is a module; instantiate the class inside it
@@ -112,6 +102,7 @@ class DQNTrainer:
             state_dim=agent_config['state_dim'],
             action_dim=agent_config['action_dim'],
             agent_role= self.agent_role,
+            n_vars=agent_config['n_vars'],
             hidden_dims=agent_config.get('hidden_dims', (128, 128, 64)),
             lr=agent_config.get('lr', 0.001),
             gamma=agent_config.get('gamma', 0.99),
