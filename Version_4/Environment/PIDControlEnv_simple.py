@@ -37,7 +37,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         ##Variables del proceso
         ###Control
         self.n_manipulable_vars = config.get('n_manipulable_vars', 2)
-        self.manipulable_ranges = config.get('manipulable_ranges', [(0.0, 100.0), (0.0, 100.0)]) #Rangos de las variables manipulables 
+        self.manipulable_ranges = config.get('manipulable_ranges', [(0.0, 10.0), (0.0, 100.0)]) #Ejemplo altura y temperatura
         self.manipulable_pvs = [
             random.uniform(rango[0], rango[1])
             for rango in self.manipulable_ranges
@@ -49,23 +49,16 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                 for rango in self.manipulable_ranges
             ] 
         ###Target
-        self.n_target_vars = config.get('n_target_vars', 1)
-        self.target_ranges = config.get('target_ranges', [(0.0, 1.0)])
-        self.target_setpoints = config.get('target_setpoints', [0.2])
-        self.target_working_ranges = config.get('target_working_ranges', [(0.0, 5.0)])
-        self.target_pvs = [
-            random.uniform(rango[0], rango[1])
-            for rango in self.target_working_ranges
-        ]
+        self.n_target_vars = self.n_manipulable_vars  # En ambiente simple, mismo número de variables manipulables y target
+        self.target_ranges = self.manipulable_ranges  # En ambiente simple, mismo rango para manipulables y target
+        self.target_setpoints = self.manipulable_setpoints  # En ambiente simple, mismos setpoints para manipulables y target
+
 
         #CONFIGURACION DEL AGENTE
 
         ##Configuracion de los Agentes según arquitectura
         if self.architecture == 'simple':
             self.agente_orch = False
-            self.agente_ctrl = config.get('agent_controller_config', {})
-        elif self.architecture == 'jerarquica':
-            self.agente_orch = config.get('agent_orchestrator_config', {})
             self.agente_ctrl = config.get('agent_controller_config', {})
 
         ## Estado interno
@@ -74,11 +67,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         self.error_derivative_manipulable = [0.0] * self.n_manipulable_vars
         self.error_manipulable = [0.0] * self.n_manipulable_vars
         self.error_prevs_manipulable = [0.0] * self.n_manipulable_vars
-
-        self.error_integral_target = [0.0] * self.n_target_vars
-        self.error_derivative_target = [0.0] * self.n_target_vars
-        self.error_target = [0.0] * self.n_target_vars
-        self.error_prevs_target = [0.0] * self.n_target_vars
 
         ### tiempo de respuesta y dt (Detectores de tiempo solo para dinamicas controlables (PID))
         self.dt_sim = config.get('dt_usuario', 1.0)  
@@ -107,66 +95,26 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                               'error_derivative' # Voy muy rápido/lento?
                               ]
         self.obs_size = len(self.obs_structure) 
-        # Según arquitectura, cuántas variables ve cada uno para cumplir con la estructura de observación
-        if self.architecture == 'simple':
-            n_obs_total = self.obs_size * self.n_manipulable_vars
-            
-            self.observation_space = spaces.Box(
-                low=np.full(n_obs_total, -np.inf, dtype=np.float32),
-                high=np.full(n_obs_total, np.inf, dtype=np.float32),
-                dtype=np.float32
-            )
-
-        elif self.architecture == 'jerarquica':
-            n_obs_ctrl = self.obs_size * self.n_manipulable_vars
-            n_obs_orch = self.obs_size * self.n_target_vars
-            
-            self.observation_space = {
-                'ctrl': spaces.Box(
-                    low=np.full(n_obs_ctrl, -np.inf, dtype=np.float32),
-                    high=np.full(n_obs_ctrl, np.inf, dtype=np.float32),
-                    dtype=np.float32
-                ),
-                'orch': spaces.Box(
-                    low=np.full(n_obs_orch, -np.inf, dtype=np.float32),
-                    high=np.full(n_obs_orch, np.inf, dtype=np.float32),
-                    dtype=np.float32
-                )
-            }
+        n_obs_total = self.obs_size * self.n_manipulable_vars
+        
+        self.observation_space = spaces.Box(
+            low=np.full(n_obs_total, -np.inf, dtype=np.float32),
+            high=np.full(n_obs_total, np.inf, dtype=np.float32),
+            dtype=np.float32
+        )
         
         # ESPACIO DE ACCIONES
 
         # El espacio de acciones es continuo, ya que da numeros, pero se puede manejar tambien como discreto si se usan indices para seleccionar acciones predefinidas
-        if self.architecture == 'simple':
-            if self.agente_ctrl.get('agent_type', 'continuous') == 'continuous':
-                self.action_space = spaces.Box(
-                    low=np.tile(np.array([-100, -10, -1]), self.n_manipulable_vars).astype(np.float32),
-                    high=np.tile(np.array([100, 10, 1]), self.n_manipulable_vars).astype(np.float32),
-                    dtype=np.float32
-                )
-            elif self.agente_ctrl.get('agent_type', 'discrete') == 'discrete':
-                self.action_space = spaces.MultiDiscrete([7] * self.n_manipulable_vars)
+        if self.agente_ctrl.get('agent_type', 'continuous') == 'continuous':
+            self.action_space = spaces.Box(
+                low=np.tile(np.array([-100, -10, -1]), self.n_manipulable_vars).astype(np.float32),
+                high=np.tile(np.array([100, 10, 1]), self.n_manipulable_vars).astype(np.float32),
+                dtype=np.float32
+            )
+        elif self.agente_ctrl.get('agent_type', 'discrete') == 'discrete':
+            self.action_space = spaces.MultiDiscrete([7] * self.n_manipulable_vars)
 
-        elif self.architecture == 'jerarquica':
-            # Ctrl
-            if self.agente_ctrl.get('agent_type', 'continuous') == 'continuous':
-                self.action_space_ctrl = spaces.Box(
-                    low=np.tile(np.array([-100, -10, -1]), self.n_manipulable_vars).astype(np.float32),
-                    high=np.tile(np.array([100, 10, 1]), self.n_manipulable_vars).astype(np.float32),
-                    dtype=np.float32
-                )
-            elif self.agente_ctrl.get('agent_type', 'discrete') == 'discrete':
-                self.action_space_ctrl = spaces.MultiDiscrete([7] * self.n_manipulable_vars)
-            
-            # Orch
-            if self.agente_orch.get('agent_type', 'continuous') == 'continuous':
-                self.action_space_orch = spaces.Box(
-                    low=np.array([-r[1] for r in self.manipulable_ranges], dtype=np.float32),
-                    high=np.array([r[1] for r in self.manipulable_ranges], dtype=np.float32),
-                    dtype=np.float32
-                )
-            elif self.agente_orch.get('agent_type', 'discrete') == 'discrete':
-                self.action_space_orch = spaces.MultiDiscrete([3] * self.n_manipulable_vars)
 
         ## Mapeo de acciones discretas
         if self.agente_ctrl.get('agent_type', 'continuous') == 'discrete':
@@ -180,17 +128,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                 6: ('mantener', 0)
             }
 
-        if self.agente_orch.get('agent_type', 'continuous') == 'discrete':
-            self.ACTION_MAP_ORCH = {
-                0: +1,  # Aumentar SP
-                1: -1,  # Disminuir SP
-                2: 0    # Mantener
-            }       
-
         ## Componente para traducir acciones a parámetros de control
         self.apply_action = ApplyAction(
             delta_percent_ctrl=config.get('delta_percent_ctrl', 0.2),
-            delta_percent_orch=config.get('delta_percent_orch', 0.05),
             pid_limits=config.get('pid_limits', None),
             manipulable_ranges=self.manipulable_ranges
         )
@@ -207,62 +147,31 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         )
             
     def _get_observation(self):
-                
-        if self.architecture == 'simple':
-            obs = []
-            for i in range(self.n_manipulable_vars):
-                obs.extend([
-                    self.manipulable_pvs[i],
-                    self.manipulable_setpoints[i],
-                    self.error_manipulable[i],
-                    self.error_integral_manipulable[i],
-                    self.error_derivative_manipulable[i]
-                ])
-            return np.array(obs, dtype=np.float32)
+        obs = []
+        for i in range(self.n_manipulable_vars):
+            obs.extend([
+                self.manipulable_pvs[i],
+                self.manipulable_setpoints[i],
+                self.error_manipulable[i],
+                self.error_integral_manipulable[i],
+                self.error_derivative_manipulable[i]
+            ])
+        return np.array(obs, dtype=np.float32)
         
-        elif self.architecture == 'jerarquica':
-            obs_ctrl = []
-            for i in range(self.n_manipulable_vars):
-                obs_ctrl.extend([
-                    self.manipulable_pvs[i],
-                    self.manipulable_setpoints[i],
-                    self.error_manipulable[i],
-                    self.error_integral_manipulable[i],
-                    self.error_derivative_manipulable[i]
-                ])
-            
-            obs_orch = []
-            for j in range(self.n_target_vars):
-                obs_orch.extend([
-                    self.target_pvs[j],
-                    self.target_setpoints[j],
-                    self.error_target[j],
-                    self.error_integral_target[j],
-                    self.error_derivative_target[j]
-                ])
-            
-            return {
-                'ctrl': np.array(obs_ctrl, dtype=np.float32),
-                'orch': np.array(obs_orch, dtype=np.float32)
-            }
-
     def _get_info(self):
         
         info = {
             # Trayectorias completas durante el step
             'trajectory_manipulable': self.trajectory_manipulable,  # Lista de listas [[pv1_t0, pv1_t1, ...], [pv2_t0, pv2_t1, ...]]
-            'trajectory_target': self.trajectory_target,            # Idem pero para el orchestrador
             
             # Energía acumulada (esfuerzo de control)
             'energy': self.energy_accumulated,  # Suma de |control_output| * dt
             
             # Overshoot (máximo pico sobre SP)
             'overshoot_manipulable': self.overshoot_manipulable,  # Lista [overshoot_var1, overshoot_var2, ...]
-            'overshoot_target': self.overshoot_target,            # Idem pero para el orchestrador
             
             # Error acumulado absoluto
-            'accumulated_error_manipulable': self.accumulated_error_manipulable,  
-            'accumulated_error_target': self.accumulated_error_target,            
+            'accumulated_error_manipulable': self.accumulated_error_manipulable,           
             
         }
         
@@ -281,15 +190,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             random.uniform(rango[0], rango[1])
             for rango in self.manipulable_ranges
         ]
-
-        self.target_pvs = [
-            random.uniform(rango[0], rango[1])
-            for rango in self.target_working_ranges
-        ]
-        self.target_setpoints = [
-            random.uniform(rango[0], rango[1])
-            for rango in self.target_ranges
-        ]    
 
         # DINAMICA DEL AMBIENTE
         self.pid_controllers = [
@@ -313,12 +213,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
 
         #VARIABLES DE INFO
         self.trajectory_manipulable = [[] for _ in range(self.n_manipulable_vars)]
-        self.trajectory_target = [[] for _ in range(self.n_target_vars)]
         self.energy_accumulated = 0.0
         self.overshoot_manipulable = [0.0] * self.n_manipulable_vars
-        self.overshoot_target = [0.0] * self.n_target_vars
         self.accumulated_error_manipulable = [0.0] * self.n_manipulable_vars
-        self.accumulated_error_target = [0.0] * self.n_target_vars
 
         # VARIABLES DE ENTRENAMIENTO
         self.current_step = 0
@@ -349,7 +246,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
 
         
         # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector hace toda la simulación)
-        energy_step = 0.0  # ← Inicializar
+        energy_step = 0.0 
     
         for i in range(self.n_manipulable_vars):
             resultado = self.response_time_detectors[i].estimate(...)
