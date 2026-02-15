@@ -28,12 +28,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         #elif env_type == 'real':
         #    self.proceso = RealPIDEnv(config.get('env_type_config', {}))
 
-        ## Dinamica del ambiente
-        self.pid_controllers = [
-            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim)  
-            for _ in range(self.n_manipulable_vars)
-        ]    
-        
         ##Variables del proceso
         ###Control
         self.n_manipulable_vars = config.get('n_manipulable_vars', 2)
@@ -48,10 +42,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                 random.uniform(rango[0], rango[1])
                 for rango in self.manipulable_ranges
             ] 
-        ###Target
-        self.n_target_vars = self.n_manipulable_vars  # En ambiente simple, mismo número de variables manipulables y target
-        self.target_ranges = self.manipulable_ranges  # En ambiente simple, mismo rango para manipulables y target
-        self.target_setpoints = self.manipulable_setpoints  # En ambiente simple, mismos setpoints para manipulables y target
 
 
         #CONFIGURACION DEL AGENTE
@@ -84,6 +74,12 @@ class PIDControlEnv_Simple(gym.Env, ABC):
 
         #### Valor dummy iniciales (se calculan en el primer step)
         self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
+
+        ### Dinamica del ambiente
+        self.pid_controllers = [
+            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim)  
+            for _ in range(self.n_manipulable_vars)
+        ] 
 
 
         #ESPACIO DE OBSERVACIONES
@@ -203,11 +199,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         self.error_manipulable = [0.0] * self.n_manipulable_vars
         self.error_prevs_manipulable = [0.0] * self.n_manipulable_vars
 
-        self.error_integral_target = [0.0] * self.n_target_vars
-        self.error_derivative_target = [0.0] * self.n_target_vars
-        self.error_target = [0.0] * self.n_target_vars
-        self.error_prevs_target = [0.0] * self.n_target_vars
-
         #TIEMPO
         self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
 
@@ -249,7 +240,12 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         energy_step = 0.0 
     
         for i in range(self.n_manipulable_vars):
-            resultado = self.response_time_detectors[i].estimate(...)
+            resultado = self.response_time_detectors[i].estimate(
+                pv_inicial=self.manipulable_pvs[i],
+                sp=self.manipulable_setpoints[i],
+                pid_controller=self.pid_controllers[i],
+                max_time=1800
+            )
             
             # Guardar resultados
             self.tiempo_respuesta[i] = resultado['tiempo']
@@ -265,13 +261,13 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         
         # 3. ACTUALIZAR ERRORES
         self._update_errors()
-        
-        # 4. CALCULAR RECOMPENSA (usa self.tiempo_respuesta)
-        reward = self._calculate_reward()
-        
-        # 5. DETERMINAR TERMINACIÓN
+
+        # 4. DETERMINAR TERMINACIÓN
         terminated = self._check_terminated()
         truncated = self._check_truncated()
+
+        # 5. CALCULAR RECOMPENSA (usa self.tiempo_respuesta)
+        reward = self._calculate_reward(energy_step, terminated, truncated)
         
         # 6. OBTENER OBSERVACIÓN E INFO
         observation = self._get_observation()
