@@ -8,12 +8,14 @@ class DQN_Network(nn.Module):
         self,
         state_dim: int ,
         n_actions: int,
+        n_vars: int,
         hidden_dims: Tuple[int, ...] = (128, 128, 64)
     ):
         super(DQN_Network, self).__init__()
         
         self.state_dim = state_dim
         self.n_actions = n_actions
+        self.n_vars = n_vars
         self.hidden_dims = hidden_dims
         
         # Construir capas dinámicamente
@@ -26,7 +28,7 @@ class DQN_Network(nn.Module):
             input_dim = hidden_dim
         
         # Capa de salida
-        layers.append(nn.Linear(input_dim, n_actions))
+        layers.append(nn.Linear(input_dim, n_actions * n_vars))
         
         self.network = nn.Sequential(*layers)
         
@@ -45,6 +47,10 @@ class DQN_Network(nn.Module):
             state = state.unsqueeze(0)
         
         # Forward pass
-        q_values = self.network(state)
+        q_values_flat = self.network(state)  # Shape: (batch, 7*n_vars)
         
-        return q_values
+        # Reshape a (batch, n_vars, n_actions) para facilitar gather
+        batch_size = q_values_flat.shape[0]
+        q_values = q_values_flat.view(batch_size, self.n_vars, self.n_actions)
+        
+        return q_values  # Shape: (batch, n_vars, 7)

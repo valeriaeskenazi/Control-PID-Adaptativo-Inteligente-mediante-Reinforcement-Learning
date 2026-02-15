@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime
 
 
-from ...Environment import PIDControlEnv_simple , PIDControlEnv_complex
+from Environment import PIDControlEnv_simple , PIDControlEnv_complex
 from .algorithm_DQN import DQNAgent
 from ..memory import Experience, SimpleReplayBuffer, PriorityReplayBuffer
 
@@ -19,18 +19,30 @@ class DQNTrainer:
         
         # AMBIENTE
         if self.architecture == 'simple':
-            self.env = PIDControlEnv_simple(config['env_config'])
+            # PIDControlEnv_simple is a module; instantiate the class inside it
+            self.env = PIDControlEnv_simple.PIDControlEnv_Simple(config['env_config'])
+            # Si el proceso del env no tiene external_process, intentar conectar un TankSimulator
+            try:
+                if getattr(self.env, 'proceso', None) is not None and getattr(self.env.proceso, 'external_process', None) is None:
+                    from Environment.Simulation_Env.tanque_simple import TankSimulator
+                    sim_cfg = config.get('env_config', {}).get('env_type_config', {}) or {}
+                    simulator = TankSimulator(**sim_cfg)
+                    self.env.proceso.connect_external_process(simulator)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"No se pudo conectar TankSimulator en DQNTrainer: {e}")
         
         elif self.architecture == 'jerarquica':
-            self.env = PIDControlEnv_complex(config['env_config'])
+            # PIDControlEnv_complex is a module; instantiate the class inside it
+            self.env = PIDControlEnv_complex.PIDControlEnv_Complex(config['env_config'])
         
         
         # AGENTES
         if self.architecture == 'simple':
-            # Crear agente CTRL desde cero
-            self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
+            # Inicializar roles y luego crear agente CTRL desde cero
             self.agent_role = 'ctrl'
             self.agent_orch = None
+            self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
         
         elif self.architecture == 'jerarquica':
             # CTRL: Cargar modelo pre-entrenado

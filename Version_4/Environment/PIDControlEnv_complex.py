@@ -5,13 +5,13 @@ from abc import ABC
 from gymnasium import spaces
 from typing import Optional, Dict, Any, Tuple, List, Union
 
-from ..Aux.PIDComponents_PID import PIDController 
-from ..Aux.PIDComponents_time import ResponseTimeDetector
-from ..Aux.PIDComponentes_translate import ApplyAction
-from ..Aux.PIDComponents_Reward import RewardCalculator
+from Aux.PIDComponents_PID import PIDController 
+from Aux.PIDComponents_time import ResponseTimeDetector
+from Aux.PIDComponentes_translate import ApplyAction
+from Aux.PIDComponents_Reward import RewardCalculator
 from .Simulation_Env.SimulationEnv import SimulationPIDEnv
 
-class PIDControlEnv_Simple(gym.Env, ABC):
+class PIDControlEnv_Complex(gym.Env, ABC):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__()
@@ -340,7 +340,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             current_values= self.manipulable_pvs
         )
         
-        # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector hace toda la simulación)
+        # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector llama simulate_step, dentro de cada ambiente de simulacion lo tiene)
         energy_step = 0.0  # ← Inicializar
     
         for i in range(self.n_manipulable_vars):

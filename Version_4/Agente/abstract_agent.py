@@ -76,6 +76,33 @@ class AbstractPIDAgent(ABC):
 
         return action  # Siempre devuelve np.ndarray consistente con PIDComponents_translate
 
+    def preprocess_state(self, state: np.ndarray) -> torch.Tensor:
+        """Procesa el estado antes de pasarlo a la red neuronal.
+
+        Convierte numpy arrays a torch.FloatTensor y mueve al dispositivo.
+        Añade dimensión de batch si es necesario.
+        """
+        # Manejar numpy arrays, tensores o secuencias
+        if isinstance(state, np.ndarray):
+            state_tensor = torch.from_numpy(state).float().to(self.device)
+        elif isinstance(state, torch.Tensor):
+            # Asegurar dtype y device
+            state_tensor = state.float().to(self.device)
+        else:
+            # Intentar construir tensor desde secuencia/valor
+            state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device)
+
+        # Normalizar dimensiones:
+        # - Si es un estado 1D -> (state_dim,) -> agregar batch -> (1, state_dim)
+        # - Si ya es batch (2D) -> dejar como está
+        if state_tensor.dim() == 0:
+            # Escalar/valor escalar -> convertir a (1,1)
+            state_tensor = state_tensor.unsqueeze(0).unsqueeze(0)
+        elif state_tensor.dim() == 1:
+            state_tensor = state_tensor.unsqueeze(0)
+
+        return state_tensor
+
     def get_training_info(self) -> Dict[str, Any]:
         return {
             'training_step': self.training_step,

@@ -5,10 +5,10 @@ from abc import ABC
 from gymnasium import spaces
 from typing import Optional, Dict, Any, Tuple, List, Union
 
-from ..Aux.PIDComponents_PID import PIDController 
-from ..Aux.PIDComponents_time import ResponseTimeDetector
-from ..Aux.PIDComponentes_translate import ApplyAction
-from ..Aux.PIDComponents_Reward import RewardCalculator
+from Aux.PIDComponents_PID import PIDController 
+from Aux.PIDComponents_time import ResponseTimeDetector
+from Aux.PIDComponentes_translate import ApplyAction
+from Aux.PIDComponents_Reward import RewardCalculator
 from .Simulation_Env.SimulationEnv import SimulationPIDEnv
 
 class PIDControlEnv_Simple(gym.Env, ABC):
