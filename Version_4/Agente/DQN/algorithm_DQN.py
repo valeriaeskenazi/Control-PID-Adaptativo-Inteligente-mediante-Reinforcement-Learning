@@ -14,7 +14,7 @@ class DQNAgent(AbstractValueBasedAgent):
         self,
         state_dim: int,          
         action_dim: int,
-        agent_type: str,
+        agent_role: str,
         hidden_dims: tuple = (128, 128, 64),
         lr: float = 0.001,
         gamma: float = 0.99,
@@ -33,7 +33,7 @@ class DQNAgent(AbstractValueBasedAgent):
         super().__init__(
             state_dim=state_dim,
             action_dim=action_dim,
-            agent_type=agent_type,
+            agent_role=agent_role,
             device=device,
             seed=seed,
             epsilon_start=epsilon_start,

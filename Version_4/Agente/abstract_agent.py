@@ -10,13 +10,13 @@ class AbstractPIDAgent(ABC):
         self,
         state_dim: int,
         action_dim: Union[int, Tuple],
-        agent_type: str,  # 'ctrl' o 'orch'
+        agent_role: str,  # 'ctrl' o 'orch'
         device: str = 'cpu',
         seed: Optional[int] = None
     ):
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.agent_type = agent_type 
+        self.agent_role = agent_role
         self.device = torch.device(device)
         
         if seed is not None:
@@ -83,7 +83,7 @@ class AbstractPIDAgent(ABC):
             'device': str(self.device),
             'state_dim': self.state_dim,
             'action_dim': self.action_dim,
-            'agent_type': self.agent_type
+            'agent_role': self.agent_role
         }
 
 
@@ -112,7 +112,7 @@ class AbstractValueBasedAgent(AbstractPIDAgent):
         self,
         state_dim: int,           
         action_dim: int,          
-        agent_type: str,          
+        agent_role: str,          
         device: str = 'cpu',
         seed: Optional[int] = None,
         epsilon_start: float = 1.0,
@@ -123,7 +123,7 @@ class AbstractValueBasedAgent(AbstractPIDAgent):
         super().__init__(
             state_dim=state_dim,
             action_dim=action_dim,
-            agent_type=agent_type,  # ← AGREGAR
+            agent_role=agent_role,  
             device=device,
             seed=seed
         )
