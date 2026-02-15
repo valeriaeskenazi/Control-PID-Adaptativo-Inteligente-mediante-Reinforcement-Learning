@@ -14,6 +14,7 @@ class DQNAgent(AbstractValueBasedAgent):
         self,
         state_dim: int,          
         action_dim: int,
+        n_vars: int,
         agent_role: str,
         hidden_dims: tuple = (128, 128, 64),
         lr: float = 0.001,
@@ -46,17 +47,20 @@ class DQNAgent(AbstractValueBasedAgent):
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
         self.hidden_dims = hidden_dims
+        self.n_vars = n_vars
         
         # Redes neuronales
         self.q_network = DQN_Network(
             state_dim=state_dim,
             n_actions=action_dim,
+            n_vars=n_vars,
             hidden_dims=hidden_dims
         ).to(self.device)
         
         self.target_network = DQN_Network(
             state_dim=state_dim,
             n_actions=action_dim,
+            n_vars=n_vars,
             hidden_dims=hidden_dims
         ).to(self.device)
         
@@ -81,34 +85,20 @@ class DQNAgent(AbstractValueBasedAgent):
         self, 
         state: np.ndarray, 
         training: bool = True
-    ) -> int:
-       
-        # Usar epsilon solo en entrenamiento
-        current_epsilon = self.get_epsilon() if training else 0.0
+    ) -> np.ndarray:
         
-        # Preprocesar estado
-        state_tensor = self.preprocess_state(state)
-
-        # Calcular cuántas variables hay (state_dim / 5 porque cada var tiene 5 obs)
-        n_vars = self.state_dim // 5
-
-        actions = []
-        for i in range(n_vars):
-            # Extraer estado de esta variable
-            var_state = state[i*5:(i+1)*5]
-            state_tensor = self.preprocess_state(var_state)
-            
-            # Epsilon-greedy
-            if training and np.random.random() < self.get_epsilon():
-                action_idx = np.random.randint(0, self.action_dim)
-            else:
-                with torch.no_grad():
-                    q_values = self.q_network(state_tensor)
-                    action_idx = q_values.argmax(dim=1).item()
-            
-            actions.append(action_idx)
+        # Preprocesar estado completo
+        state_tensor = self.preprocess_state(state)  # (1, state_dim)
         
-        return np.array(actions, dtype=np.int64)
+        # Epsilon-greedy
+        if training and np.random.random() < self.get_epsilon():
+            actions = np.random.randint(0, self.action_dim, size=self.n_vars)
+        else:
+            with torch.no_grad():
+                q_values = self.q_network(state_tensor)  # (1, n_vars, n_actions)
+                actions = q_values.argmax(dim=2).squeeze(0).cpu().numpy()  # (n_vars,)
+        
+        return actions.astype(np.int64)
     
     
     def update(self, batch_data: Dict[str, Any] = None) -> Dict[str, float]:
@@ -179,26 +169,41 @@ class DQNAgent(AbstractValueBasedAgent):
         
     def compute_q_loss(
         self,
-        states: torch.Tensor,
-        actions: torch.Tensor,
-        rewards: torch.Tensor,
-        next_states: torch.Tensor,
-        dones: torch.Tensor
+        states: torch.Tensor,      # (batch, state_dim)
+        actions: torch.Tensor,     # (batch, n_vars)
+        rewards: torch.Tensor,     # (batch,)
+        next_states: torch.Tensor, # (batch, state_dim)
+        dones: torch.Tensor        # (batch,)
     ) -> torch.Tensor:
        
-        # Q-values actuales para las acciones tomadas
-        current_q_values = self.q_network(states).gather(1, actions.unsqueeze(1))
+        # Q-values actuales: (batch, n_vars, n_actions)
+        q_values = self.q_network(states)
+        
+        # Seleccionar Q-values de las acciones tomadas
+        # actions: (batch, n_vars) → (batch, n_vars, 1)
+        actions_unsqueezed = actions.unsqueeze(-1)
+        
+        # Gather Q-values: (batch, n_vars, 1) → (batch, n_vars)
+        current_q = q_values.gather(2, actions_unsqueezed).squeeze(-1)
+        
+        # Combinar Q-values de todas las variables (PROMEDIO)
+        current_q_combined = current_q.mean(dim=1)  # (batch,)
         
         # Q-values objetivo
         with torch.no_grad():
-            # Mejor acción en siguiente estado según red objetivo
-            next_q_values = self.target_network(next_states).max(1)[0]
+            next_q_values = self.target_network(next_states)  # (batch, n_vars, n_actions)
             
-            # Target: r + γ * max_a' Q(s', a') si no terminó
-            target_q_values = rewards + (self.gamma * next_q_values * ~dones)
+            # Mejor acción por variable
+            next_q_max = next_q_values.max(dim=2)[0]  # (batch, n_vars)
+            
+            # Combinar (PROMEDIO)
+            next_q_combined = next_q_max.mean(dim=1)  # (batch,)
+            
+            # Target Q-value
+            target_q = rewards + (self.gamma * next_q_combined * ~dones)
         
         # MSE loss
-        loss = nn.MSELoss()(current_q_values.squeeze(), target_q_values)
+        loss = nn.MSELoss()(current_q_combined, target_q)
         
         return loss
     
@@ -219,7 +224,8 @@ class DQNAgent(AbstractValueBasedAgent):
             'gamma': self.gamma,
             'batch_size': self.batch_size,
             'target_update_freq': self.target_update_freq,
-            'hidden_dims': self.hidden_dims
+            'hidden_dims': self.hidden_dims,
+            'n_vars': self.n_vars
         }
         
         torch.save(checkpoint, filepath)
