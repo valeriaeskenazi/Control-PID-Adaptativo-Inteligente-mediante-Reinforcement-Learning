@@ -27,13 +27,30 @@ class DQNTrainer:
         
         # AGENTES
         if self.architecture == 'simple':
+            # Crear agente CTRL desde cero
             self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
+            self.agent_role = 'ctrl'
             self.agent_orch = None
-
         
         elif self.architecture == 'jerarquica':
-            self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
+            # CTRL: Cargar modelo pre-entrenado
+            ctrl_checkpoint = config.get('ctrl_checkpoint_path', None)
+            
+            if ctrl_checkpoint:
+                print(f"Cargando agente CTRL pre-entrenado desde: {ctrl_checkpoint}")
+                self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
+                self.agent_ctrl.load(ctrl_checkpoint)
+                
+                # FREEZEAR agente CTRL (no entrenar)
+                self.agent_ctrl.training = False  # Flag para no actualizar
+            else:
+                raise ValueError(
+                    "Arquitectura jerárquica requiere 'ctrl_checkpoint_path' "
+                    "con el modelo CTRL pre-entrenado"
+                )
+            # ORCH: Crear desde cero (este SÍ se entrena)
             self.agent_orch = self._create_agent(config['agent_orch_config'], 'orch')
+            self.agent_role = 'orch'
         
         # ENTRENAMIENTO
         self.n_episodes = config.get('n_episodes', 1000)
@@ -43,8 +60,8 @@ class DQNTrainer:
         self.log_freq = config.get('log_frequency', 10)
         
         # Directorios
-        #self.checkpoint_dir = Path(config.get('checkpoint_dir', 'checkpoints'))
-        #self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
+        self.checkpoint_dir = Path(config.get('checkpoint_dir', 'checkpoints'))
+        self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
         
         # W&B logging
         #self.use_wandb = config.get('use_wandb', False)
@@ -82,7 +99,7 @@ class DQNTrainer:
         agent = DQNAgent(
             state_dim=agent_config['state_dim'],
             action_dim=agent_config['action_dim'],
-            agent_role=agent_role,
+            agent_role= self.agent_role,
             hidden_dims=agent_config.get('hidden_dims', (128, 128, 64)),
             lr=agent_config.get('lr', 0.001),
             gamma=agent_config.get('gamma', 0.99),
@@ -180,8 +197,7 @@ class DQNTrainer:
                 # 2. CTRL ajusta parámetros PID para alcanzar setpoints
                 action_ctrl = self.agent_ctrl.select_action(state_ctrl, training=training)
                 
-                # 3. Combinar acciones (depende de tu implementación del env)
-                # Aquí asumimos que el env espera un dict con ambas acciones
+                # 3. Combinar acciones 
                 action = {
                     'ctrl': action_ctrl,
                     'orch': action_orch
@@ -196,10 +212,6 @@ class DQNTrainer:
                 
                 # Almacenar experiencias
                 if training:
-                    # Experiencia CTRL
-                    exp_ctrl = Experience(state_ctrl, action_ctrl, reward, next_state_ctrl, done)
-                    self.agent_ctrl.memory.add(exp_ctrl)
-                    
                     # Experiencia ORCH
                     exp_orch = Experience(state_orch, action_orch, reward, next_state_orch, done)
                     self.agent_orch.memory.add(exp_orch)
@@ -242,7 +254,7 @@ class DQNTrainer:
             eval_rewards.append(episode_reward)
         
         mean_reward = np.mean(eval_rewards)
-        print(f"📊 Evaluación: Reward promedio = {mean_reward:.2f}")
+        print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
         
         return mean_reward
     
