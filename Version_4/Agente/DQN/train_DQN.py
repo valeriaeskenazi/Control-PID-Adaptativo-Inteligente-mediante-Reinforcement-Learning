@@ -77,6 +77,9 @@ class DQNTrainer:
         # ESTADÍSTICAS
         self.episode_rewards = []
         self.episode_lengths = []
+        self.episode_energies = []  
+        self.episode_max_overshoots = []  
+        self.epsilons = []  
         self.best_reward = -float('inf')
     
     def _create_agent(self, agent_config: Dict[str, Any], agent_type: str) -> DQNAgent:
@@ -126,6 +129,9 @@ class DQNTrainer:
             # Guardar estadísticas
             self.episode_rewards.append(episode_reward)
             self.episode_lengths.append(episode_length)
+            self.episode_energies.append(episode_metrics.get('energy', 0))  
+            self.episode_max_overshoots.append(episode_metrics.get('max_overshoot', 0))  
+            self.epsilons.append(episode_metrics.get('ctrl_epsilon', 0))  
             
             # Logging
             if episode % self.log_freq == 0:
@@ -168,6 +174,8 @@ class DQNTrainer:
         # Métricas acumuladas
         ctrl_losses = []
         orch_losses = []
+        episode_energy = 0  
+        episode_max_overshoot = 0  
         
         while not done and episode_length < self.max_steps_per_episode:
             
@@ -189,6 +197,12 @@ class DQNTrainer:
                     metrics = self.agent_ctrl.update()
                     if metrics:
                         ctrl_losses.append(metrics.get('q_loss', 0))
+                
+                # ACUMULAR MÉTRICAS DEL EPISODIO
+                episode_energy += info.get('energy', 0)
+                if 'overshoot_manipulable' in info:
+                    current_overshoots = info['overshoot_manipulable']
+                    episode_max_overshoot = max(episode_max_overshoot, max(current_overshoots))
                 
                 state = next_state
             
@@ -234,18 +248,20 @@ class DQNTrainer:
             episode_reward += reward
             episode_length += 1
         
-        # Compilar métricas del episodio
+        # Compilar métricas del episodio        
         episode_metrics = {
             'ctrl_loss': np.mean(ctrl_losses) if ctrl_losses else 0,
             'ctrl_epsilon': self.agent_ctrl.get_epsilon(),
+            'energy': info.get('energy', 0),  
+            'max_overshoot': max(info.get('overshoot_manipulable', [0]))  
         }
-        
+
         if self.architecture == 'jerarquica':
             episode_metrics.update({
                 'orch_loss': np.mean(orch_losses) if orch_losses else 0,
                 'orch_epsilon': self.agent_orch.get_epsilon(),
             })
-        
+
         return episode_reward, episode_length, episode_metrics
     
     def _evaluate(self, n_eval_episodes: int = 5) -> float:
