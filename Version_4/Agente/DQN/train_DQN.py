@@ -79,7 +79,13 @@ class DQNTrainer:
         self.episode_lengths = []
         self.episode_energies = []  
         self.episode_max_overshoots = []  
-        self.epsilons = []  
+        self.epsilons = [] 
+
+        ##Historial de parámetros PID
+        self.kp_history = []
+        self.ki_history = []
+        self.kd_history = [] 
+
         self.best_reward = -float('inf')
     
     def _create_agent(self, agent_config: Dict[str, Any], agent_type: str) -> DQNAgent:
@@ -133,6 +139,12 @@ class DQNTrainer:
             self.episode_max_overshoots.append(episode_metrics.get('max_overshoot', 0))  
             self.epsilons.append(episode_metrics.get('ctrl_epsilon', 0))  
             
+            # Guardar PID params
+            if self.architecture == 'simple':
+                self.kp_history.append(episode_metrics.get('kp', 1.0))
+                self.ki_history.append(episode_metrics.get('ki', 0.1))
+                self.kd_history.append(episode_metrics.get('kd', 0.01))
+
             # Logging
             if episode % self.log_freq == 0:
                 self._log_episode(episode, episode_reward, episode_length, episode_metrics)
@@ -162,7 +174,7 @@ class DQNTrainer:
         # Reset ambiente
         if self.architecture == 'simple':
             state = self.env.reset()[0]
-        else:  # jerarquica
+        else:
             obs = self.env.reset()[0]
             state_ctrl = obs['ctrl']
             state_orch = obs['orch']
@@ -181,10 +193,7 @@ class DQNTrainer:
             
             # ARQUITECTURA SIMPLE
             if self.architecture == 'simple':
-                # Seleccionar acción CTRL
                 action = self.agent_ctrl.select_action(state, training=training)
-                
-                # Ejecutar en ambiente
                 next_state, reward, terminated, truncated, info = self.env.step(action)
                 done = terminated or truncated
                 
@@ -252,9 +261,15 @@ class DQNTrainer:
         episode_metrics = {
             'ctrl_loss': np.mean(ctrl_losses) if ctrl_losses else 0,
             'ctrl_epsilon': self.agent_ctrl.get_epsilon(),
-            'energy': info.get('energy', 0),  
-            'max_overshoot': max(info.get('overshoot_manipulable', [0]))  
+            'energy': episode_energy,  
+            'max_overshoot': episode_max_overshoot  
         }
+
+        if self.architecture == 'simple':
+            pid_params = self.env.pid_controllers[0].get_params()
+            episode_metrics['kp'] = pid_params[0]
+            episode_metrics['ki'] = pid_params[1]
+            episode_metrics['kd'] = pid_params[2]
 
         if self.architecture == 'jerarquica':
             episode_metrics.update({
