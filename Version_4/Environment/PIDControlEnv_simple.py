@@ -43,7 +43,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                 for rango in self.manipulable_ranges
             ] 
 
-
         #CONFIGURACION DEL AGENTE
 
         ##Configuracion de los Agentes según arquitectura
@@ -188,10 +187,8 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         ]
 
         # DINAMICA DEL AMBIENTE
-        self.pid_controllers = [
-            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim)  
-            for _ in range(self.n_manipulable_vars)
-        ]
+        for pid in self.pid_controllers:
+            pid.reset()
 
         # ERRORES
         self.error_integral_manipulable = [0.0] * self.n_manipulable_vars
