@@ -45,8 +45,12 @@ class DQNTrainer:
                 self.agent_ctrl.epsilon = 0.0
                 self.env.agente_ctrl = self.agent_ctrl
                 self.env.action_type_ctrl = config['agent_ctrl_config'].get('action_type', 'discrete')
-
-            # ORCH: C
+            else:
+                raise ValueError(
+                    "Arquitectura jerárquica requiere agente control entrenado"
+                )
+            
+            # ORCH
             self.agent_orch = self._create_agent(config['agent_orch_config'], 'orch')
             self.agent_role = 'orch'
         
@@ -133,7 +137,10 @@ class DQNTrainer:
             self.episode_lengths.append(episode_length)
             self.episode_energies.append(episode_metrics.get('energy', 0))  
             self.episode_max_overshoots.append(episode_metrics.get('max_overshoot', 0))  
-            self.epsilons.append(episode_metrics.get('ctrl_epsilon', 0))  
+            if self.architecture == 'simple':
+                self.epsilons.append(episode_metrics.get('ctrl_epsilon', 0))
+            elif self.architecture == 'jerarquica':
+                self.epsilons.append(episode_metrics.get('orch_epsilon', 0))  
             
             # Guardar PID params
             if self.architecture == 'simple':
@@ -239,11 +246,7 @@ class DQNTrainer:
                     self.agent_orch.memory.add(exp_orch)
                     
                     # Actualizar agentes
-                    metrics_ctrl = self.agent_ctrl.update()
                     metrics_orch = self.agent_orch.update()
-                    
-                    if metrics_ctrl:
-                        ctrl_losses.append(metrics_ctrl.get('q_loss', 0))
                     if metrics_orch:
                         orch_losses.append(metrics_orch.get('q_loss', 0))
                 

@@ -77,10 +77,6 @@ class DQNAgent(AbstractValueBasedAgent):
         # Optimizador
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr)
         
-        # Replay buffer
-        self.memory = SimpleReplayBuffer(capacity=memory_size, device=device)
-        
-    
     def select_action(
         self, 
         state: np.ndarray, 
