@@ -305,22 +305,46 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         # Episodio se trunca si alcanza max_steps
         return self.current_step >= self.max_steps
     
-    def _check_terminated(self) -> bool:
-        threshold = 0.02  # 2% de error relativo
-        
+    #def _check_terminated(self) -> bool:
+    #    threshold = 0.02  # 2% de error relativo
+    #    
         # Éxito: todas las variables dentro del threshold
+    #    errors_relativo = [
+    #        abs(pv - sp) / abs(sp) if sp != 0 else abs(pv - sp)
+    #        for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)
+    #    ]
+    #    success = all(error < threshold for error in errors_relativo)
+        
+        # Fallo: alguna variable fuera de rango físico
+    #    failure = any(
+    #        pv < rango[0] or pv > rango[1]
+    #        for pv, rango in zip(self.manipulable_pvs, self.manipulable_ranges)
+    #    )
+        
+    #    return success or failure
+    def _check_terminated(self) -> bool:
+        threshold = 0.02
+
         errors_relativo = [
             abs(pv - sp) / abs(sp) if sp != 0 else abs(pv - sp)
             for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)
         ]
         success = all(error < threshold for error in errors_relativo)
-        
-        # Fallo: alguna variable fuera de rango físico
+
         failure = any(
             pv < rango[0] or pv > rango[1]
             for pv, rango in zip(self.manipulable_pvs, self.manipulable_ranges)
         )
-        
+
+        # DEBUG TEMPORAL
+        if success or failure:
+            print(f"  [TERMINATED] success={success}, failure={failure}")
+            print(f"  PVs: {self.manipulable_pvs}")
+            print(f"  SPs: {self.manipulable_setpoints}")
+            print(f"  Errors rel: {errors_relativo}")
+            for pv, rango in zip(self.manipulable_pvs, self.manipulable_ranges):
+                print(f"  PV {pv:.4f} en rango {rango}: {pv < rango[0] or pv > rango[1]}")
+
         return success or failure
 
     def _calculate_variable_metrics(self, var_idx: int, resultado: dict):
