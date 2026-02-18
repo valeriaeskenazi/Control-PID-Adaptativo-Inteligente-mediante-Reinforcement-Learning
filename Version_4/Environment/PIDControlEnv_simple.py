@@ -176,6 +176,10 @@ class PIDControlEnv_Simple(gym.Env, ABC):
               options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
         
+        #SIMULADOR
+        if hasattr(self.proceso, 'reset'):
+            self.proceso.reset()
+
         # VARIABES DEL ENTORNO A RESETEAR
         self.manipulable_pvs = [
             random.uniform(rango[0], rango[1])
