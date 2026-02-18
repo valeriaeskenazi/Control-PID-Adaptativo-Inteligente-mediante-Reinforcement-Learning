@@ -42,15 +42,11 @@ class DQNTrainer:
                 print(f"Cargando agente CTRL pre-entrenado desde: {ctrl_checkpoint}")
                 self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
                 self.agent_ctrl.load(ctrl_checkpoint)
-                
-                # FREEZEAR agente CTRL (no entrenar)
-                self.agent_ctrl.training = False  # Flag para no actualizar
-            else:
-                raise ValueError(
-                    "Arquitectura jerárquica requiere 'ctrl_checkpoint_path' "
-                    "con el modelo CTRL pre-entrenado"
-                )
-            # ORCH: Crear desde cero (este SÍ se entrena)
+                self.agent_ctrl.epsilon = 0.0
+                self.env.agente_ctrl = self.agent_ctrl
+                self.env.action_type_ctrl = config['agent_ctrl_config'].get('action_type', 'discrete')
+
+            # ORCH: C
             self.agent_orch = self._create_agent(config['agent_orch_config'], 'orch')
             self.agent_role = 'orch'
         
