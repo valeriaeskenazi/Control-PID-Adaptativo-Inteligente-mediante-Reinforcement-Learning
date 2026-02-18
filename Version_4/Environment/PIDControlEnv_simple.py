@@ -255,7 +255,10 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             
             # Acumular energía de ESTE step
             if 'trayectoria_control' in resultado:
-                energy_step += sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
+                if resultado['trayectoria_control']:
+                    n_pasos = len(resultado['trayectoria_control'])
+                    energia_raw = sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
+                    energy_step += energia_raw / (n_pasos * max(self.manipulable_ranges[i][1], 1.0))
             
             # Calcular métricas para info
             self._calculate_variable_metrics(i, resultado)
