@@ -52,3 +52,11 @@ class SimulationPIDEnv:
         if self.manipulable_pvs is None:
             raise RuntimeError("Ambiente no inicializado. Llama a reset() primero.")
         return self.manipulable_pvs.copy()
+    
+    def get_target_values(self, manipulable_pvs: list) -> list:
+        if self.external_process and hasattr(self.external_process, 'get_measurements'):
+            measurements = self.external_process.get_measurements()
+            # Extraer variable objetivo (ejemplo: Cb)
+            return [measurements.get('Cb', 0.0)]
+        else:
+            return [0.0] * len(manipulable_pvs)
