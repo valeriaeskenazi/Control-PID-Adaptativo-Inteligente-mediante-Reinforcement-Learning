@@ -176,17 +176,16 @@ class PIDControlEnv_Simple(gym.Env, ABC):
               options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
         
-        #SIMULADOR
+        #SIMULADOR Y VARIABES DEL ENTORNO A RESETEAR
         if hasattr(self.proceso, 'reset'):
-            pvs_iniciales = self.proceso.reset()  # CSTRSimulator.reset() retorna [Tc_initial, F_initial]
-            if pvs_iniciales is not None:
-                self.manipulable_pvs = list(pvs_iniciales)  # [327.0, 100.0] — estado real del CSTR
-
-        # VARIABES DEL ENTORNO A RESETEAR
-        self.manipulable_pvs = [
-            random.uniform(rango[0], rango[1])
-            for rango in self.manipulable_ranges    
-        ]
+            pvs_iniciales = self.proceso.reset()
+            self.manipulable_pvs = list(pvs_iniciales) if pvs_iniciales else [
+                random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
+            ]
+        else:
+            self.manipulable_pvs = [
+                random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
+            ]
         self.manipulable_setpoints = [
             random.uniform(rango[0], rango[1])
             for rango in self.manipulable_ranges
