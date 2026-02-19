@@ -101,6 +101,9 @@ class CSTRSimulator:
         dt: float
     ) -> float:
 
+        # Debug: Imprimir control_output 
+        print(f"    [CSTR] control_output={control_output:.4f}, state_before={self.state}")
+
         # Guardar dt original
         dt_original = self.dt
         self.dt = dt
@@ -124,6 +127,9 @@ class CSTRSimulator:
         
         # Restaurar dt original
         self.dt = dt_original
+        
+        # Debugger
+        print(f"    [CSTR] result={result}, state_after={self.state}")
         
         # Retornar el NUEVO PV
         # result = [T_actual, F_actual] en modo multi-variable
