@@ -44,9 +44,11 @@ class SimulationPIDEnv:
             ]
         
         if self.external_process is not None and hasattr(self.external_process, 'reset'):
-            self.external_process.reset()
+            pvs_cstr = self.external_process.reset()  # [327.0, 100.0]
+            self.manipulable_pvs = list(pvs_cstr)
+            return self.manipulable_pvs  # retorna los del CSTR, no random
         
-        return self.manipulable_pvs.copy()
+        return self.manipulable_pvs
 
     def get_state(self) -> list:
         if self.manipulable_pvs is None:
