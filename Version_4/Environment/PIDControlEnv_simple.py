@@ -217,10 +217,15 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         observation = self._get_observation()
         info = self._get_info() 
 
+        # DEBUGG
+        print(f"  [RESET] manipulable_pvs={self.manipulable_pvs}, setpoints={self.manipulable_setpoints}")
+        
         return observation, info
 
     def step(self, action):
-        
+        # DEBUGG
+        print(f"  [STEP START] PVs={self.manipulable_pvs}, SPs={self.manipulable_setpoints}")
+
         # 1. TRADUCIR ACCION A PARAMETROS DE CONTROL
         self.action_type = self.agente_ctrl.get('agent_type', 'continuous')
         pid_params = self.apply_action.translate(
@@ -280,6 +285,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         
         # 7. INCREMENTAR STEP
         self.current_step += 1
+
+        # DEBUGG
+        print(f"  [STEP END] PVs={self.manipulable_pvs}, terminated={terminated}, truncated={truncated}")
 
         return observation, reward, terminated, truncated, info
     
