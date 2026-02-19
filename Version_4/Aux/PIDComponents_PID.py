@@ -39,7 +39,7 @@ class PIDController:
         
         # Anti-windup: si hay saturación, no acumular integral
         if output != output_clipped:
-            self.integral -= error * self.dt
+            self.integral -= (output - output_clipped) / self.ki
         
         # Guardar para próxima iteración
         self.prev_error = error
