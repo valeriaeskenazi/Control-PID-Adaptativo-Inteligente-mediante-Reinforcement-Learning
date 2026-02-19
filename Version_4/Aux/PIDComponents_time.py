@@ -54,6 +54,7 @@ class ResponseTimeDetector:
 
             # Timeout
             if t >= max_time:
+                print(f"    [DETECTOR TIMEOUT] pv_final={pv}, t={t}") #Debug
                 resultado['tiempo'] = max_time
                 resultado['pv_final'] = pv
                 resultado['converged'] = False
@@ -64,6 +65,9 @@ class ResponseTimeDetector:
         resultado['pv_final'] = pv
         resultado['converged'] = True
         
+        #Debug
+        print(f"    [DETECTOR] converged={resultado['converged']}, tiempo={resultado['tiempo']}, pv_final={resultado['pv_final']}")
+
         return resultado
 
     def _estimate_online(self, pv_inicial, sp, pid_controller, max_time):
