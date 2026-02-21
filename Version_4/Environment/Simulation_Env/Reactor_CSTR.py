@@ -94,47 +94,6 @@ class CSTRSimulator:
         return np.array([dCadt, dCbdt, dCcdt, dTdt, dVdt])
 
     # Método para ResponseTimeDetector
-    def simulate_step(
-        self,
-        control_output: float,
-        variable_index: int,
-        dt: float
-    ) -> float:
-
-        # Debug: Imprimir control_output 
-        print(f"    [CSTR] control_output={control_output:.4f}, state_before={self.state}")
-
-        # Guardar dt original
-        dt_original = self.dt
-        self.dt = dt
-        
-        # Aplicar límites al control_output
-        if variable_index == 0:
-            # Variable 0: Tc (temperatura de enfriamiento)
-            control_output = np.clip(control_output, self.Tc_min, self.Tc_max)
-            control_vector = [control_output, self.F_current]
-            self.Tc_current = control_output
-            
-        elif variable_index == 1:
-            # Variable 1: F (flujo de entrada)
-            control_output = np.clip(control_output, self.F_min, self.F_max)
-            control_vector = [self.Tc_current, control_output]
-            self.F_current = control_output
-            
-        
-        # Ejecutar step del simulador (actualiza self.state internamente)
-        result = self.step(control_output=control_vector, setpoint=None)
-        
-        # Restaurar dt original
-        self.dt = dt_original
-        
-        # Debugger
-        print(f"    [CSTR] result={result}, state_after={self.state}")
-        
-        # Retornar el NUEVO PV
-        # result = [T_actual, F_actual] en modo multi-variable
-        return result[variable_index]
-    
     def simulate_step_multi(self, control_outputs: list, dt: float) -> list:
         """Simula un paso con AMBAS variables de control simultáneamente."""
         Tc = np.clip(control_outputs[0], self.Tc_min, self.Tc_max)
