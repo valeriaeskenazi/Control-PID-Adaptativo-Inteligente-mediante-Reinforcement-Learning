@@ -247,30 +247,38 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         
         # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector hace toda la simulación)
         energy_step = 0.0 
-    
+
+        resultado_multi = self.response_time_detectors[0]._estimate_multi(
+            pvs_inicial=list(self.manipulable_pvs),
+            sps=list(self.manipulable_setpoints),
+            pid_controllers=self.pid_controllers,
+            max_time=1800
+        )
+            
+        # Extraer resultados
         for i in range(self.n_manipulable_vars):
-            resultado = self.response_time_detectors[i].estimate(
-                pv_inicial=self.manipulable_pvs[i],
-                sp=self.manipulable_setpoints[i],
-                pid_controller=self.pid_controllers[i],
-                max_time=1800
-            )
+            self.manipulable_pvs[i]   = resultado_multi['pvs_final'][i]
+            self.tiempo_respuesta[i]  = resultado_multi['tiempos'][i]
+            self.trajectory_manipulable[i] = resultado_multi['trayectorias_pv'][i]
             
-            # Guardar resultados
-            self.tiempo_respuesta[i] = resultado['tiempo']
-            self.trajectory_manipulable[i] = resultado['trayectoria_pv']
-            self.manipulable_pvs[i] = resultado['pv_final']
-            
-            # Acumular energía de ESTE step
-            if 'trayectoria_control' in resultado:
-                if resultado['trayectoria_control']:
-                    n_pasos = len(resultado['trayectoria_control'])
-                    energia_raw = sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
-                    energy_step += energia_raw / (n_pasos * max(self.manipulable_ranges[i][1], 1.0))
-            
-            # Calcular métricas para info
-            self._calculate_variable_metrics(i, resultado)
-        
+            # Métricas por variable
+            resultado_i = {
+                'trayectoria_pv':      resultado_multi['trayectorias_pv'][i],
+                'trayectoria_control': resultado_multi['trayectorias_control'][i],
+                'pv_final':            resultado_multi['pvs_final'][i],
+                'converged':           resultado_multi['converged'][i]
+            }
+            self._calculate_variable_metrics(i, resultado_i)
+
+        # Energía
+        energy_step = 0.0
+        for i in range(self.n_manipulable_vars):
+            traj_u = resultado_multi['trayectorias_control'][i]
+            if traj_u:
+                n_pasos = len(traj_u)
+                energia_raw = sum(abs(u) for u in traj_u) * self.dt_sim
+                energy_step += energia_raw / (n_pasos * max(self.manipulable_ranges[i][1], 1.0))
+
         # 3. ACTUALIZAR ERRORES
         self._update_errors()
 
