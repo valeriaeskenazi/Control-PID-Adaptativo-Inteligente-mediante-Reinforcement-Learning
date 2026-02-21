@@ -31,6 +31,16 @@ class SimulationPIDEnv:
         
         return float(new_pv)
     
+    def simulate_step_multi(self, control_outputs: list, dt: float) -> list:
+        # Para simulacion casos multivariables
+        new_pvs = self.external_process.simulate_step_multi(control_outputs, dt)
+        
+        for i, (pv, rango) in enumerate(zip(new_pvs, self.manipulable_ranges)):
+            new_pvs[i] = float(np.clip(pv, rango[0], rango[1]))
+        
+        self.manipulable_pvs = new_pvs
+        return new_pvs
+    
     def connect_external_process(self, process_simulator) -> None:
         self.external_process = process_simulator
     
