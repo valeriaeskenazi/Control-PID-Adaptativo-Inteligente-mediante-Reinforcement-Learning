@@ -62,6 +62,8 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         self.dt_sim = config.get('dt_usuario', 1.0)
         self.reward_dead_band = config.get('reward_dead_band', 0.02)
 
+        self.max_time_detector = config.get('max_time_detector', 1800)
+
         self.response_time_detectors = ResponseTimeDetector(
                 proceso=self.proceso,
                 env_type=env_type,
@@ -249,7 +251,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             pvs_inicial=list(self.manipulable_pvs),
             sps=list(self.manipulable_setpoints),
             pid_controllers=self.pid_controllers,
-            max_time=1800
+            max_time=self.max_time_detector
         )
             
         # Extraer resultados
