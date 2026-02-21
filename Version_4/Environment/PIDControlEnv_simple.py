@@ -21,21 +21,12 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         ##Arquitectura
         self.architecture = config.get('architecture', 'Simple')  # 'Simple' o 'Jerarquica'
 
-        ##Tipo de entorno
+       ##Tipo de entorno
         env_type = config.get('env_type', 'simulation')
-        if env_type == 'simulation':
-            self.proceso = SimulationPIDEnv(config.get('env_type_config', {}))
-        #elif env_type == 'real':
-        #    self.proceso = RealPIDEnv(config.get('env_type_config', {}))
-        
-        # Inyectar manipulable_ranges en env_type_config
-        env_type_config = config.get('env_type_config', {})
-        env_type_config['manipulable_ranges'] = self.manipulable_ranges
 
-        ##Variables del proceso
-        ###Control
+        ##Variables del proceso — PRIMERO definir ranges
         self.n_manipulable_vars = config.get('n_manipulable_vars', 2)
-        self.manipulable_ranges = config.get('manipulable_ranges', [(0.0, 10.0), (0.0, 100.0)]) #Ejemplo altura y temperatura
+        self.manipulable_ranges = config.get('manipulable_ranges', [(0.0, 10.0), (0.0, 100.0)])
         self.manipulable_pvs = [
             random.uniform(rango[0], rango[1])
             for rango in self.manipulable_ranges
@@ -45,8 +36,14 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             self.manipulable_setpoints = [
                 random.uniform(rango[0], rango[1])
                 for rango in self.manipulable_ranges
-            ] 
+            ]
 
+        # DESPUÉS inyectar e instanciar proceso
+        env_type_config = config.get('env_type_config', {})
+        env_type_config['manipulable_ranges'] = self.manipulable_ranges
+        if env_type == 'simulation':
+            self.proceso = SimulationPIDEnv(env_type_config)
+            
         #CONFIGURACION DEL AGENTE
 
         ##Configuracion de los Agentes según arquitectura
