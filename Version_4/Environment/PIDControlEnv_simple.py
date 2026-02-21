@@ -58,7 +58,8 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         self.error_prevs_manipulable = [0.0] * self.n_manipulable_vars
 
         ### tiempo de respuesta y dt (Detectores de tiempo solo para dinamicas controlables (PID))
-        self.dt_sim = config.get('dt_usuario', 1.0)  
+        self.dt_sim = config.get('dt_usuario', 1.0)
+        self.reward_dead_band = config.get('reward_dead_band', 0.02)
 
         self.response_time_detectors = [
             ResponseTimeDetector(
@@ -66,7 +67,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
                 variable_index=i,
                 env_type=env_type,
                 dt=self.dt_sim,
-                tolerance=0.02  
+                tolerance=self.reward_dead_band  
             )
             for i in range(self.n_manipulable_vars)
         ]
