@@ -31,7 +31,8 @@ class ResponseTimeDetector:
         
         pv = pv_inicial
         t = 0
-        dead_band = self.tolerance * abs(sp)
+        sp_range = abs(sp - pv_inicial) if abs(sp - pv_inicial) > 1e-6 else 1.0
+        dead_band = max(self.tolerance * sp_range, 0.5)  # mínimo 0.5K/m³
         
         # Simular hasta convergencia
         while abs(sp - pv) > dead_band:
