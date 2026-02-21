@@ -23,12 +23,7 @@ class PIDControlEnv_Complex(gym.Env, ABC):
 
         ##Tipo de entorno
         env_type = config.get('env_type', 'simulation')
-        if env_type == 'simulation':
-            self.proceso = SimulationPIDEnv(config.get('env_type_config', {}))
-        #elif env_type == 'real':
-        #    self.proceso = RealPIDEnv(config.get('env_type_config', {}))
 
-        
         ##Variables del proceso
         ###Control
         self.n_manipulable_vars = config.get('n_manipulable_vars', 2)
@@ -42,11 +37,17 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.n_target_vars = config.get('n_target_vars', 1)
         self.target_ranges = config.get('target_ranges', [(0.0, 1.0)])
         self.target_setpoints = config.get('target_setpoints', [0.2])
-        self.target_working_ranges = config.get('target_working_ranges', [(0.0, 5.0)])
+        self.target_working_ranges = config.get('target_working_ranges', [(0.0, 1.0)])
         self.target_pvs = [
             random.uniform(rango[0], rango[1])
             for rango in self.target_working_ranges
         ]
+
+        # DESPUÉS inyectar e instanciar proceso
+        env_type_config = config.get('env_type_config', {}).copy()
+        env_type_config['manipulable_ranges'] = self.manipulable_ranges
+        if env_type == 'simulation':
+            self.proceso = SimulationPIDEnv(env_type_config)
 
         #CONFIGURACION DEL AGENTE
 
@@ -63,18 +64,17 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.error_prevs_target = [0.0] * self.n_target_vars
 
         ### tiempo de respuesta y dt (Detectores de tiempo solo para dinamicas controlables (PID))
-        self.dt_sim = config.get('dt_usuario', 1.0)  
+        self.dt_sim = config.get('dt_usuario', 1.0)
+        self.reward_dead_band = config.get('reward_dead_band', 0.02)  
 
-        self.response_time_detectors = [
-            ResponseTimeDetector(
+        self.max_time_detector = config.get('max_time_detector', 1800)
+
+        self.response_time_detectors = ResponseTimeDetector(
                 proceso=self.proceso,
-                variable_index=i,
                 env_type=env_type,
                 dt=self.dt_sim,
-                tolerance=0.02  
-            )
-            for i in range(self.n_manipulable_vars)
-        ]
+                tolerance=self.reward_dead_band 
+            ) 
 
         ### Dinamica del ambiente (PIDs para variables manipulables)
         self.pid_controllers = [
@@ -201,10 +201,15 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         super().reset(seed=seed)
         
         # VARIABES DEL ENTORNO A RESETEAR
-        self.manipulable_pvs = [
-            random.uniform(rango[0], rango[1])
-            for rango in self.manipulable_ranges    
-        ]
+        if hasattr(self.proceso, 'reset'):
+            pvs_iniciales = self.proceso.reset()
+            self.manipulable_pvs = list(pvs_iniciales) if pvs_iniciales else [
+                random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
+            ]
+        else:
+            self.manipulable_pvs = [
+                random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
+            ]
 
         self.target_pvs = [
             random.uniform(rango[0], rango[1])
@@ -227,10 +232,10 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.tiempo_respuesta = [0.0] * self.n_target_vars
 
         #VARIABLES DE INFO
-        self.trajectory_target = [[] for _ in range(self.n_target_vars)]
+        self.trajectory_manipulable = [[] for _ in range(self.n_manipulable_vars)]
         self.energy_accumulated = 0.0
-        self.overshoot_target = [0.0] * self.n_target_vars
-        self.accumulated_error_target = [0.0] * self.n_target_vars
+        self.overshoot_manipulable = [0.0] * self.n_manipulable_vars
+        self.accumulated_error_manipulable = [0.0] * self.n_manipulable_vars
 
         # VARIABLES DE ENTRENAMIENTO
         self.current_step = 0
@@ -282,20 +287,26 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         # 6. SIMULAR VARIABLES MANIPULABLES (PIDs → nuevos SP)
         energy_step = 0.0
         
+        resultado = self.response_time_detectors.estimate(
+            pvs_inicial=self.manipulable_pvs,
+            sps=self.new_SP,
+            pid_controllers=self.pid_controllers,
+            max_time=self.max_time_detector
+        )
+
+            
         for i in range(self.n_manipulable_vars):
-            resultado = self.response_time_detectors[i].estimate(
-                pv_inicial=self.manipulable_pvs[i],
-                sp=self.new_SP[i],  #  Nuevo SP definido por ORCH
-                pid_controller=self.pid_controllers[i],
-                max_time=1800
-            )
-            
-            # Guardar resultados
-            self.manipulable_pvs[i] = resultado['pv_final']
-            
-            # Acumular energía
-            if 'trayectoria_control' in resultado:
-                energy_step += sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
+            self.manipulable_pvs[i]   = resultado['pvs_final'][i]
+            self.tiempo_respuesta[i]  = resultado['tiempos'][i]
+            self.trajectory_manipulable[i] = resultado['trayectorias_pv'][i]
+
+        # Acumular energía
+        for i in range(self.n_manipulable_vars):
+            traj_u = resultado['trayectorias_control'][i]
+            if traj_u:
+                n_pasos = len(traj_u)
+                energia_raw = sum(abs(u) for u in traj_u) * self.dt_sim
+                energy_step += energia_raw / (n_pasos * max(self.manipulable_ranges[i][1], 1.0))
         
         # 7. ACTUALIZAR VARIABLES OBJETIVO (dinámica del proceso)
         if hasattr(self.proceso, 'external_process') and self.proceso.external_process:
