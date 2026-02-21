@@ -61,7 +61,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
 
         self.response_time_detectors = ResponseTimeDetector(
                 proceso=self.proceso,
-                env_type=env_type,
+                env_type=env_type_config,
                 dt=self.dt_sim,
                 tolerance=self.reward_dead_band  
             )
