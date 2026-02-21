@@ -12,63 +12,65 @@ class ResponseTimeDetector:
 
     def estimate(self, pv_inicial, sp, pid_controller, max_time=1800):
         if self.env_type == 'simulation':
-            return self._estimate_from_simulation(pv_inicial, sp, pid_controller, max_time)
+            return self._estimate_multi(pv_inicial, sp, pid_controller, max_time)
         elif self.env_type == 'real':
             return self._estimate_online(pv_inicial, sp, pid_controller, max_time)
 
-    def _estimate_from_simulation(self, pv_inicial, sp, pid_controller, max_time):
-        # Resetear el PID
-        pid_controller.reset()
+    def _estimate_multi(self, pvs_inicial: list, sps: list, 
+                    pid_controllers: list, max_time: float = 1800):
         
-        # Inicializar resultado
+        for pid in pid_controllers:
+            pid.reset()
+        
+        n_vars = len(pvs_inicial)
         resultado = {
-            'tiempo': 0,
-            'trayectoria_pv': [pv_inicial],
-            'trayectoria_control': [],
-            'pv_final': pv_inicial,
-            'converged': False
+            'pvs_final': list(pvs_inicial),
+            'tiempos': [0.0] * n_vars,
+            'trayectorias_pv': [[pv] for pv in pvs_inicial],
+            'trayectorias_control': [[] for _ in range(n_vars)],
+            'converged': [False] * n_vars
         }
         
-        pv = pv_inicial
+        pvs = list(pvs_inicial)
         t = 0
-        sp_range = abs(sp - pv_inicial) if abs(sp - pv_inicial) > 1e-6 else 1.0
-        dead_band = max(self.tolerance * sp_range, 0.5)  # mínimo 0.5K/m³
+        dead_bands = [
+            max(self.tolerance * abs(sp - pv0), 0.5)
+            for sp, pv0 in zip(sps, pvs_inicial)
+        ]
         
-        # Simular hasta convergencia
-        while abs(sp - pv) > dead_band:
-            # PID calcula control
-            control_output = pid_controller.compute(
-                setpoint=sp,
-                process_value=pv
+        while t < max_time:
+            # Chequear si TODAS convergieron
+            all_converged = all(
+                abs(sps[i] - pvs[i]) <= dead_bands[i]
+                for i in range(n_vars)
             )
-            resultado['trayectoria_control'].append(control_output)
+            if all_converged:
+                for i in range(n_vars):
+                    resultado['converged'][i] = True
+                    resultado['tiempos'][i] = t
+                break
             
-            # Simular un paso
-            pv = self.proceso.simulate_step(
-                control_output=control_output,
-                variable_index=self.variable_index,
-                dt=self.dt
-            )
-            resultado['trayectoria_pv'].append(pv)
-
+            # Cada PID calcula su output con el PV actual
+            control_outputs = []
+            for i in range(n_vars):
+                u = pid_controllers[i].compute(setpoint=sps[i], process_value=pvs[i])
+                control_outputs.append(u)
+                resultado['trayectorias_control'][i].append(u)
+            
+            # UN SOLO paso del CSTR con ambos outputs
+            pvs = self.proceso.simulate_step_multi(control_outputs, self.dt)
+            
+            for i in range(n_vars):
+                resultado['trayectorias_pv'][i].append(pvs[i])
+            
             t += self.dt
-
-            # Timeout
-            if t >= max_time:
-                print(f"    [DETECTOR TIMEOUT] pv_final={pv}, t={t}") #Debug
-                resultado['tiempo'] = max_time
-                resultado['pv_final'] = pv
-                resultado['converged'] = False
-                return resultado
         
-        # Convergencia exitosa
-        resultado['tiempo'] = t
-        resultado['pv_final'] = pv
-        resultado['converged'] = True
+        # Timeout o fin
+        resultado['pvs_final'] = list(pvs)
+        for i in range(n_vars):
+            if not resultado['converged'][i]:
+                resultado['tiempos'][i] = max_time
         
-        #Debug
-        print(f"    [DETECTOR] converged={resultado['converged']}, tiempo={resultado['tiempo']}, pv_final={resultado['pv_final']}")
-
         return resultado
 
     def _estimate_online(self, pv_inicial, sp, pid_controller, max_time):
