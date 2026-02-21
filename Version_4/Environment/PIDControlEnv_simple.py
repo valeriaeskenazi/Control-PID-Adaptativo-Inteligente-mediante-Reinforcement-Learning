@@ -21,12 +21,10 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         ##Arquitectura
         self.architecture = config.get('architecture', 'Simple')  # 'Simple' o 'Jerarquica'
 
-        ##Tipo de entorno
-        env_type = config.get('env_type', 'simulation')
-        if env_type == 'simulation':
-            self.proceso = SimulationPIDEnv(config.get('env_type_config', {}))
-        #elif env_type == 'real':
-        #    self.proceso = RealPIDEnv(config.get('env_type_config', {}))
+        ##Tipo de entorno (hardcodeado en simulacion)
+        env_type_config = config.get('env_type_config', {})
+        env_type_config['manipulable_ranges'] = self.manipulable_ranges
+        self.proceso = SimulationPIDEnv(env_type_config)
 
         ##Variables del proceso
         ###Control
