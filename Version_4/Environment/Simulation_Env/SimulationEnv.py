@@ -17,20 +17,6 @@ class SimulationPIDEnv:
         self.external_process = None
     
     
-    def simulate_step(self, control_output: float, variable_index: int, dt: float) -> float:
-        # Delegar al simulador externo
-        new_pv = self.external_process.simulate_step(control_output, variable_index, dt)
-        
-        # Clipear a rangos físicos
-        min_val, max_val = self.manipulable_ranges[variable_index]
-        new_pv = np.clip(new_pv, min_val, max_val)
-        
-        # Actualizar estado interno
-        if self.manipulable_pvs is not None:
-            self.manipulable_pvs[variable_index] = new_pv
-        
-        return float(new_pv)
-    
     def simulate_step_multi(self, control_outputs: list, dt: float) -> list:
         # Para simulacion casos multivariables
         new_pvs = self.external_process.simulate_step_multi(control_outputs, dt)
