@@ -39,11 +39,11 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             ]
 
         # DESPUÉS inyectar e instanciar proceso
-        env_type_config = config.get('env_type_config', {})
+        env_type_config = config.get('env_type_config', {}).copy()
         env_type_config['manipulable_ranges'] = self.manipulable_ranges
         if env_type == 'simulation':
             self.proceso = SimulationPIDEnv(env_type_config)
-            
+
         #CONFIGURACION DEL AGENTE
 
         ##Configuracion de los Agentes según arquitectura
