@@ -40,6 +40,7 @@ class DQNTrainer:
             
             if ctrl_checkpoint:
                 print(f"Cargando agente CTRL pre-entrenado desde: {ctrl_checkpoint}")
+                self.agent_role = 'ctrl'
                 self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
                 self.agent_ctrl.load(ctrl_checkpoint)
                 self.agent_ctrl.epsilon = 0.0
@@ -51,8 +52,9 @@ class DQNTrainer:
                 )
             
             # ORCH
-            self.agent_orch = self._create_agent(config['agent_orch_config'], 'orch')
             self.agent_role = 'orch'
+            self.agent_orch = self._create_agent(config['agent_orch_config'], 'orch')
+            
         
         # ENTRENAMIENTO
         self.n_episodes = config.get('n_episodes', 1000)
