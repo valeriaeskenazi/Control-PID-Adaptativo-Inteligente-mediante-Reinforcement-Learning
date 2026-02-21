@@ -57,7 +57,7 @@ class CSTRSimulator:
         return 2
     
     def get_initial_pvs(self) -> List[float]:
-        return [self.Tc_initial, self.F_initial]
+        return [self.T_ss, self.V_ss] # En esta simulacion, el estado estacionario es igual a los PVs iniciales (T, V)
     
     def _reactor_dynamics(self, x: np.ndarray, t: float, u: np.ndarray) -> np.ndarray:
         # Desempacar estados
@@ -135,6 +135,30 @@ class CSTRSimulator:
         # result = [T_actual, F_actual] en modo multi-variable
         return result[variable_index]
     
+    def simulate_step_multi(self, control_outputs: list, dt: float) -> list:
+        """Simula un paso con AMBAS variables de control simultáneamente."""
+        Tc = np.clip(control_outputs[0], self.Tc_min, self.Tc_max)
+        F  = np.clip(control_outputs[1], self.F_min,  self.F_max)
+        
+        self.Tc_current = Tc
+        self.F_current  = F
+        
+        u = np.array([Tc, F])
+        solution = odeint(self._reactor_dynamics, self.state, [0, dt], args=(u,))
+        self.state = solution[-1]
+        
+        # Clip post-integración
+        self.state[0] = np.clip(self.state[0], 0.0, 2.0)  # Ca
+        self.state[1] = np.clip(self.state[1], 0.0, 2.0)  # Cb 
+        self.state[2] = np.clip(self.state[2], 0.0, 2.0)  # Cc
+        self.state[3] = np.clip(self.state[3], 50.0, 500.0)  # T
+        self.state[4] = np.clip(self.state[4], 10.0, 200.0) # V
+        
+        T_meas = float(self.state[3]) + np.random.uniform(-0.1, 0.1)   # T del reactor
+        V_meas = float(self.state[4]) + np.random.uniform(-0.01, 0.01) # V del reactor
+
+        return [T_meas, V_meas]
+
     def step(
         self,
         control_output: Union[np.ndarray, List[float]],
@@ -255,7 +279,7 @@ class CSTRSimulator:
                 self.V_ss
             ])
         
-        # ✅ NUEVO: Resetear valores actuales de control
+        # Resetear valores actuales de control
         self.Tc_current = self.Tc_initial
         self.F_current = self.F_initial
         
