@@ -3,9 +3,8 @@ import numpy as np
 
 class ResponseTimeDetector:
     
-    def __init__(self, proceso, variable_index, env_type='simulation', dt=1.0, tolerance=0.05):
+    def __init__(self, proceso, env_type='simulation', dt=1.0, tolerance=0.05):
         self.proceso = proceso
-        self.variable_index = variable_index
         self.env_type = env_type
         self.dt = dt
         self.tolerance = tolerance

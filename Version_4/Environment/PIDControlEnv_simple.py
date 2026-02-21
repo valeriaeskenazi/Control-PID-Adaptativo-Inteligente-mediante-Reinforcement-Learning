@@ -61,16 +61,12 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         self.dt_sim = config.get('dt_usuario', 1.0)
         self.reward_dead_band = config.get('reward_dead_band', 0.02)
 
-        self.response_time_detectors = [
-            ResponseTimeDetector(
+        self.response_time_detectors = ResponseTimeDetector(
                 proceso=self.proceso,
-                variable_index=i,
                 env_type=env_type,
                 dt=self.dt_sim,
                 tolerance=self.reward_dead_band  
             )
-            for i in range(self.n_manipulable_vars)
-        ]
 
         #### Valor dummy iniciales (se calculan en el primer step)
         self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
@@ -248,7 +244,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         # 2. SIMULAR CADA VARIABLE (ResponseTimeDetector hace toda la simulación)
         energy_step = 0.0 
 
-        resultado_multi = self.response_time_detectors[0]._estimate_multi(
+        resultado_multi = self.response_time_detectors.estimate(
             pvs_inicial=list(self.manipulable_pvs),
             sps=list(self.manipulable_setpoints),
             pid_controllers=self.pid_controllers,
