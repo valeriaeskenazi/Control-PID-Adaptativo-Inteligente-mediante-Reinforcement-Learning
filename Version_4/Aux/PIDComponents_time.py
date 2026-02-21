@@ -10,11 +10,12 @@ class ResponseTimeDetector:
         self.dt = dt
         self.tolerance = tolerance
 
-    def estimate(self, pv_inicial, sp, pid_controller, max_time=1800):
+    def estimate(self, pvs_inicial: list, sps: list, 
+                pid_controllers: list, max_time: float = 1800):
         if self.env_type == 'simulation':
-            return self._estimate_multi(pv_inicial, sp, pid_controller, max_time)
+            return self._estimate_multi(pvs_inicial, sps, pid_controllers, max_time)
         elif self.env_type == 'real':
-            return self._estimate_online(pv_inicial, sp, pid_controller, max_time)
+            return self._estimate_online(pvs_inicial, sps, pid_controllers, max_time)
 
     def _estimate_multi(self, pvs_inicial: list, sps: list, 
                     pid_controllers: list, max_time: float = 1800):
