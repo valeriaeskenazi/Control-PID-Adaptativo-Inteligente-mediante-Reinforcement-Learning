@@ -48,25 +48,23 @@ class ApplyAction:
             - Para orch: [sp1_new, sp2_new, ...]
         """
         
-       # CASO 1: CTRL + CONTINUOUS
+        # CASO 1: CTRL + CONTINUOUS
         if agent_type == 'ctrl' and action_type == 'continuous':
             n_vars = len(current_values)
             new_params = []
             
+            # Reshape flat array a tuplas
             action_reshaped = action.reshape(n_vars, 3)
 
             for i in range(n_vars):
                 delta_kp, delta_ki, delta_kd = action_reshaped[i]
 
-                # Escalar delta de [-1,1] a porcentaje del rango real
-                kp_range = self.pid_limits[0][1] - self.pid_limits[0][0]  # ej: 100 - 0.01
-                ki_range = self.pid_limits[1][1] - self.pid_limits[1][0]
-                kd_range = self.pid_limits[2][1] - self.pid_limits[2][0]
-
-                kp_new = current_values[i][0] + delta_kp * kp_range * self.delta_percent_ctrl
-                ki_new = current_values[i][1] + delta_ki * ki_range * self.delta_percent_ctrl
-                kd_new = current_values[i][2] + delta_kd * kd_range * self.delta_percent_ctrl
+                # Aplicar deltas
+                kp_new = current_values[i][0] + delta_kp
+                ki_new = current_values[i][1] + delta_ki
+                kd_new = current_values[i][2] + delta_kd
                 
+                # Clipear
                 kp_new = np.clip(kp_new, self.pid_limits[0][0], self.pid_limits[0][1])
                 ki_new = np.clip(ki_new, self.pid_limits[1][0], self.pid_limits[1][1])
                 kd_new = np.clip(kd_new, self.pid_limits[2][0], self.pid_limits[2][1])
