@@ -22,18 +22,20 @@ class SimplePlotter:
         episode_rewards: List[float],
         episode_energies: List[float],
         episode_max_overshoots: List[float],
-        epsilons: List[float],
-        window: int = 20
+        window: int = 20,
+        epsilons: Optional[List[float]] = None,
+        actor: Optional[List[float]] = None,
+        critic: Optional[List[float]] = None,
     ):
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         episodes = np.arange(len(episode_rewards))
-        
-        # 1. REWARDS 
+
+        # 1. REWARDS
         ax = axes[0, 0]
         ax.plot(episodes, episode_rewards, alpha=0.3, color=self.colors['gray'], label='Raw')
         if len(episode_rewards) >= window:
             ma = self._moving_average(episode_rewards, window)
-            ax.plot(episodes[window-1:], ma, color=self.colors['primary'], 
+            ax.plot(episodes[window-1:], ma, color=self.colors['primary'],
                    linewidth=2.5, label=f'MA({window})')
         ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
         ax.set_ylabel('Total Reward', fontsize=11)
@@ -41,12 +43,12 @@ class SimplePlotter:
         ax.legend(loc='lower right')
         ax.grid(True, alpha=0.3)
 
-        # 2. ENERGY (ESFUERZO DE CONTROL)
+        # 2. ENERGY
         ax = axes[0, 1]
         ax.plot(episodes, episode_energies, alpha=0.3, color=self.colors['gray'], label='Raw')
         if len(episode_energies) >= window:
             ma = self._moving_average(episode_energies, window)
-            ax.plot(episodes[window-1:], ma, color=self.colors['secondary'], 
+            ax.plot(episodes[window-1:], ma, color=self.colors['secondary'],
                    linewidth=2.5, label=f'MA({window})')
         ax.set_ylabel('Energy', fontsize=11)
         ax.set_title('Control Effort (Energy)', fontsize=12, fontweight='bold')
@@ -58,7 +60,7 @@ class SimplePlotter:
         ax.plot(episodes, episode_max_overshoots, alpha=0.3, color=self.colors['gray'], label='Raw')
         if len(episode_max_overshoots) >= window:
             ma = self._moving_average(episode_max_overshoots, window)
-            ax.plot(episodes[window-1:], ma, color=self.colors['danger'], 
+            ax.plot(episodes[window-1:], ma, color=self.colors['danger'],
                    linewidth=2.5, label=f'MA({window})')
         ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
         ax.set_xlabel('Episode', fontsize=11)
@@ -67,15 +69,30 @@ class SimplePlotter:
         ax.legend(loc='upper right')
         ax.grid(True, alpha=0.3)
 
-        # 4. EPSILON (EXPLORACIÓN)
+        # 4. EXPLORACIÓN / LOSSES — adaptativo según algoritmo
         ax = axes[1, 1]
-        ax.plot(episodes, epsilons, color=self.colors['success'], linewidth=2.5)
+        if epsilons is not None:
+            # DQN
+            ax.plot(episodes, epsilons, color=self.colors['success'], linewidth=2.5)
+            ax.set_ylabel('Epsilon (ε)', fontsize=11)
+            ax.set_title('Exploration Rate', fontsize=12, fontweight='bold')
+            ax.set_ylim([-0.05, 1.05])
+        elif actor is not None and critic is not None:
+            # DDPG / AC
+            ax.plot(episodes, actor, alpha=0.4, color=self.colors['primary'], label='Actor Raw')
+            ax.plot(episodes, critic, alpha=0.4, color=self.colors['secondary'], label='Critic Raw')
+            if len(actor) >= window:
+                ax.plot(episodes[window-1:], self._moving_average(actor, window),
+                       color=self.colors['primary'], linewidth=2.5, label=f'Actor MA({window})')
+                ax.plot(episodes[window-1:], self._moving_average(critic, window),
+                       color=self.colors['secondary'], linewidth=2.5, label=f'Critic MA({window})')
+            ax.set_ylabel('Loss', fontsize=11)
+            ax.set_title('Actor & Critic Loss', fontsize=12, fontweight='bold')
+            ax.legend(loc='upper right', fontsize=9)
+
         ax.set_xlabel('Episode', fontsize=11)
-        ax.set_ylabel('Epsilon (ε)', fontsize=11)
-        ax.set_title('Exploration Rate', fontsize=12, fontweight='bold')
-        ax.set_ylim([-0.05, 1.05])
         ax.grid(True, alpha=0.3)
-        
+
         plt.tight_layout()
         plt.show()
     
