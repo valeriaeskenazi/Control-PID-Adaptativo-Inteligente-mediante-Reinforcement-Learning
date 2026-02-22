@@ -83,7 +83,7 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         ]
 
         #### Valor dummy iniciales (se calculan en el primer step)
-        self.tiempo_respuesta = [0.0] * self.n_target_vars
+        self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
 
 
         #ESPACIO DE OBSERVACIONES
@@ -231,7 +231,7 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.error_prevs_target = [0.0] * self.n_target_vars
 
         #TIEMPO
-        self.tiempo_respuesta = [0.0] * self.n_target_vars
+        self.tiempo_respuesta = [0.0] * self.n_manipulable_vars
 
         #VARIABLES DE INFO
         self.trajectory_manipulable = [[] for _ in range(self.n_manipulable_vars)]
