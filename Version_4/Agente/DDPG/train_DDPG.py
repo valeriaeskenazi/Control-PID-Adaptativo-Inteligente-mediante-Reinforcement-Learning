@@ -8,7 +8,7 @@ from datetime import datetime
 from Environment import PIDControlEnv_simple, PIDControlEnv_complex
 from .algorithm_DDPG import DDPGAgent
 from ..memory import Experience, SimpleReplayBuffer
-from DQN.algorithm_DQN import DQNAgent
+from ..DQN.algorithm_DQN import DQNAgent
 from ..memory import SimpleReplayBuffer, PriorityReplayBuffer
 
 
