@@ -211,7 +211,10 @@ class PIDControlEnv_Complex(gym.Env, ABC):
                 random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
             ]
 
-        self.current_SPs_manipulable = list(self.manipulable_pvs)  # SP iniciales = PV iniciale    
+        self.current_SPs_manipulable = [
+            random.uniform(rango[0], rango[1])
+            for rango in self.manipulable_ranges
+        ]    
 
         self.target_pvs = [
             random.uniform(rango[0], rango[1])
