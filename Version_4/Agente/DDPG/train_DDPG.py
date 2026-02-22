@@ -4,23 +4,15 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
 
+
 from Environment import PIDControlEnv_simple, PIDControlEnv_complex
 from .algorithm_DDPG import DDPGAgent
 from ..memory import Experience, SimpleReplayBuffer
+from DQN.algorithm_DQN import DQNAgent
+from ..memory import SimpleReplayBuffer, PriorityReplayBuffer
 
 
 class DDPGTrainer:
-    """
-    Trainer para DDPG. Misma estructura que DQNTrainer para facilitar comparación.
-    
-    Diferencias clave vs DQNTrainer:
-    - action_type siempre 'continuous' 
-    - No hay epsilon (exploración via ruido OU)
-    - Métricas: actor_loss y critic_loss en lugar de q_loss y epsilon
-    - reset_noise() al inicio de cada episodio
-    - warmup_steps: primeros N steps solo recolecta experiencias, no entrena
-    """
-
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.architecture = config['env_config']['architecture']
@@ -38,7 +30,7 @@ class DDPGTrainer:
             self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
 
         elif self.architecture == 'jerarquica':
-            # CTRL pre-entrenado (puede ser DQN o DDPG)
+            # CTRL pre-entrenado (puede ser cualquiera aca dejo DQN para ejemplo, pero se puede usar cualquier agente pre-entrenado)
             ctrl_checkpoint = config.get('ctrl_checkpoint_path', None)
             if not ctrl_checkpoint:
                 raise ValueError("Arquitectura jerárquica requiere ctrl_checkpoint_path")
@@ -46,16 +38,14 @@ class DDPGTrainer:
             print(f"Cargando agente CTRL pre-entrenado desde: {ctrl_checkpoint}")
             self.agent_role = 'ctrl'
 
-            # Soporte para CTRL DQN o DDPG pre-entrenado
+            # Soporte para CTRL DQN pre-entrenado
             ctrl_algo = config['agent_ctrl_config'].get('algorithm', 'dqn')
             if ctrl_algo == 'dqn':
-                from .algorithm_DQN import DQNAgent
-                from ..memory import SimpleReplayBuffer, PriorityReplayBuffer
+
                 buffer_type = config['agent_ctrl_config'].get('buffer_type', 'simple')
                 buffer_size = config['agent_ctrl_config'].get('buffer_size', 10000)
                 device = config['agent_ctrl_config'].get('device', 'cpu')
                 if buffer_type == 'priority':
-                    from ..memory import PriorityReplayBuffer
                     rb = PriorityReplayBuffer(capacity=buffer_size, device=device)
                 else:
                     rb = SimpleReplayBuffer(capacity=buffer_size, device=device)
@@ -89,7 +79,7 @@ class DDPGTrainer:
         self.checkpoint_dir = Path(config.get('checkpoint_dir', 'checkpoints'))
         self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
-        # ESTADÍSTICAS (mismas que DQNTrainer para comparación directa)
+        # ESTADÍSTICAS 
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_energies = []

@@ -4,14 +4,7 @@ from typing import Tuple
 
 
 class ActorNetwork(nn.Module):
-    """
-    Red Actor para DDPG - produce deltas continuos.
-    
-    Para ORCH: produce [delta_Tc, delta_F] en [-1, 1] (translate los escala)
-    Para CTRL: produce [delta_Kp, delta_Ki, delta_Kd] x n_vars en [-1, 1]
-    
-    Salida siempre en [-1, 1] via tanh, translate se encarga de escalar al rango real.
-    """
+
 
     def __init__(
         self,
@@ -59,9 +52,6 @@ class ActorNetwork(nn.Module):
 class CriticNetwork(nn.Module):
     """
     Red Critic para DDPG - estima Q(s, a).
-    
-    A diferencia del AC viejo (que estimaba V(s)), 
-    este Critic recibe estado + acción y devuelve Q-value escalar.
     """
 
     def __init__(

@@ -11,10 +11,7 @@ from ..abstract_agent import AbstractActorCriticAgent
 
 
 class OUNoise:
-    """
-    Ornstein-Uhlenbeck noise para exploración en espacios continuos.
-    Produce ruido correlacionado temporalmente, mejor que ruido gaussiano puro para control.
-    """
+
     def __init__(self, action_dim: int, mu=0.0, theta=0.15, sigma=0.2):
         self.action_dim = action_dim
         self.mu = mu
@@ -32,17 +29,6 @@ class OUNoise:
 
 
 class DDPGAgent(AbstractActorCriticAgent):
-    """
-    Agente DDPG (Deep Deterministic Policy Gradient) para acciones continuas.
-    
-    Compatible con:
-    - agent_role='ctrl': produce deltas de PID (translate CASO 1: CTRL + CONTINUOUS)
-    - agent_role='orch': produce deltas de SP  (translate CASO 3: ORCH + CONTINUOUS)
-    
-    El Actor produce acciones en [-1, 1], translate las convierte a deltas reales.
-    Usa replay buffer (off-policy) igual que DQN.
-    Usa redes target con soft update (tau) para estabilidad.
-    """
 
     def __init__(
         self,
@@ -110,14 +96,7 @@ class DDPGAgent(AbstractActorCriticAgent):
         print(f"DDPG Agent creado | role={agent_role} | state={state_dim} | action={action_dim} | n_vars={n_vars} | device={device}")
 
     def select_action(self, state: np.ndarray, training: bool = True) -> np.ndarray:
-        """
-        Seleccionar acción continua en [-1, 1].
-        
-        En training: acción determinística + ruido OU para exploración.
-        En eval: acción determinística pura.
-        
-        translate() se encarga de convertir estos valores a deltas reales.
-        """
+
         state_tensor = self.preprocess_state(state)
 
         with torch.no_grad():
@@ -131,10 +110,7 @@ class DDPGAgent(AbstractActorCriticAgent):
         return action.astype(np.float32)
 
     def update(self, batch_data: Dict[str, Any] = None) -> Dict[str, float]:
-        """
-        Actualizar Actor y Critic con un batch del replay buffer.
-        Equivalente al update() de DQNAgent pero para DDPG.
-        """
+
         if len(self.memory) < max(self.batch_size, self.warmup_steps):
             return {}
 
@@ -175,10 +151,7 @@ class DDPGAgent(AbstractActorCriticAgent):
         }
 
     def compute_actor_loss(self, states: torch.Tensor) -> torch.Tensor:
-        """
-        Loss del Actor: maximizar Q(s, actor(s)).
-        Negativo porque optimizamos con descenso de gradiente.
-        """
+
         actions_pred = self.actor(states)
         q_values = self.critic(states, actions_pred)
         return -q_values.mean()
@@ -191,10 +164,7 @@ class DDPGAgent(AbstractActorCriticAgent):
         next_states: torch.Tensor,
         dones: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Loss del Critic: MSE entre Q(s,a) actual y target de Bellman.
-        Usa redes target para estabilidad (igual que DQN).
-        """
+
         with torch.no_grad():
             next_actions = self.actor_target(next_states)
             next_q = self.critic_target(next_states, next_actions).squeeze(1)
