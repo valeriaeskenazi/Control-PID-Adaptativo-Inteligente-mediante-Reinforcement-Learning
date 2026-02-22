@@ -38,7 +38,7 @@ class PIDController:
         output_clipped = np.clip(output, *self.output_limits)
         
         # Anti-windup: si hay saturación, no acumular integral
-        if output != output_clipped:
+        if output != output_clipped and self.ki > 1e-8:
             self.integral -= (output - output_clipped) / self.ki
         
         # Guardar para próxima iteración
