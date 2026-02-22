@@ -211,6 +211,8 @@ class PIDControlEnv_Complex(gym.Env, ABC):
                 random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
             ]
 
+        self.current_SPs_manipulable = list(self.manipulable_pvs)  # SP iniciales = PV iniciale    
+
         self.target_pvs = [
             random.uniform(rango[0], rango[1])
             for rango in self.target_working_ranges
@@ -263,8 +265,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             action=action_orch,
             agent_type='orch',
             action_type=self.action_type_orch,
-            current_values=self.manipulable_pvs
+            current_values=self.current_SPs_manipulable
         )
+        self.current_SPs_manipulable = self.new_SP.copy() # Actualizar SPs actuales para la próxima acción de ORCH
         
         # 3. CTRL DECIDE PARÁMETROS PID PARA ALCANZAR ESOS SP
         obs_ctrl = self._get_observation()['ctrl']
