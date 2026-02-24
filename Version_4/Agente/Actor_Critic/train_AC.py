@@ -9,15 +9,7 @@ from ..memory import Experience, SimpleReplayBuffer
 
 
 class ACTrainer:
-    """
-    Trainer para Actor-Critic Estocástico.
-    Misma estructura que DQNTrainer y DDPGTrainer para facilitar comparación.
-
-    Referencia:
-        Sutton, R. S., & Barto, A. G. (2018). Reinforcement Learning: An Introduction
-        (2nd ed.). MIT Press. Chapter 13: Policy Gradient Methods.
-    """
-
+    
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.architecture = config['env_config']['architecture']

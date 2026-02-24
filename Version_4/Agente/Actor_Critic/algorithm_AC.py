@@ -1,17 +1,3 @@
-"""
-Actor-Critic Estocástico con replay buffer.
-
-Referencia principal:
-    Sutton, R. S., & Barto, A. G. (2018). Reinforcement Learning: An Introduction
-    (2nd ed.). MIT Press. Chapter 13: Policy Gradient Methods.
-
-Diferencias clave respecto a DDPG:
-    - Política ESTOCÁSTICA: π(a|s) = N(μ(s), σ(s)) — la exploración es parte del modelo
-    - Critic estima V(s), no Q(s,a)
-    - Ventaja: A = r + γV(s') - V(s) — implementa directamente Ec. 13.6 de S&B
-    - Compatible con ctrl y orch via translate() usando deltas continuos
-"""
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -24,22 +10,11 @@ from ..abstract_agent import AbstractActorCriticAgent
 
 
 class ACAgent(AbstractActorCriticAgent):
-    """
-    Actor-Critic estocástico con replay buffer para acciones continuas.
-
-    Compatible con:
-    - agent_role='ctrl': produce deltas de PID (translate CASO 1: CTRL + CONTINUOUS)
-    - agent_role='orch': produce deltas de SP  (translate CASO 3: ORCH + CONTINUOUS)
-
-    El Actor produce acciones en [-1, 1] muestreadas de N(μ, σ).
-    translate() las convierte a deltas reales sobre Kp/Ki/Kd o Tc/F.
-    """
-
     def __init__(
         self,
         state_dim: int,
         action_dim: int,
-        agent_role: str,          # 'ctrl' o 'orch'
+        agent_role: str,          
         n_vars: int,
         hidden_dims: tuple = (128, 128, 64),
         lr_actor: float = 0.0001,
@@ -85,14 +60,7 @@ class ACAgent(AbstractActorCriticAgent):
         print(f"AC Estocástico creado | role={agent_role} | state={state_dim} | action={action_dim} | device={device}")
 
     def select_action(self, state: np.ndarray, training: bool = True) -> np.ndarray:
-        """
-        Muestrea acción de la política estocástica π(a|s) = N(μ(s), σ(s)).
-
-        En training: muestrea de la distribución (exploración inherente).
-        En eval: usa directamente la media μ(s) (acción determinística).
-
-        Retorna acción en [-1, 1] — translate() la convierte a delta real.
-        """
+        #Muestrea acción de la política estocástica π(a|s) = N(μ(s), σ(s)).
         state_tensor = self.preprocess_state(state)
 
         if training:
@@ -106,16 +74,6 @@ class ACAgent(AbstractActorCriticAgent):
         return action.astype(np.float32)
 
     def update(self, batch_data: Dict[str, Any] = None) -> Dict[str, float]:
-        """
-        Actualiza Actor y Critic con un batch del replay buffer.
-
-        Implementa Sutton & Barto Ec. 13.6:
-            δ = r + γV(s') - V(s)          ← ventaja (TD error)
-            θ ← θ + α * ∇log π(a|s) * δ   ← Actor (policy gradient)
-            w ← w + α * δ * ∇V(s)          ← Critic (value function)
-
-        El término de entropía (Ec. 13.7) incentiva exploración continua.
-        """
         if len(self.memory) < max(self.batch_size, self.warmup_steps):
             return {}
 
@@ -164,14 +122,7 @@ class ACAgent(AbstractActorCriticAgent):
         actions: torch.Tensor,
         advantages: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Policy gradient loss con término de entropía (S&B Ec. 13.7).
-
-        L = -E[log π(a|s) * A] - entropy_coef * H[π]
-
-        El término de entropía H[π] incentiva que la política no colapse
-        a una solución determinística prematuramente.
-        """
+        
         dist = self.actor.get_distribution(states)
         log_probs = dist.log_prob(actions).sum(dim=-1)  # (batch,)
         entropy = dist.entropy().sum(dim=-1).mean()      # H[π]
@@ -189,10 +140,7 @@ class ACAgent(AbstractActorCriticAgent):
         next_states: torch.Tensor,
         dones: torch.Tensor
     ) -> torch.Tensor:
-        """
-        MSE entre V(s) y el target r + γV(s').
-        Implementa la actualización del Critic de S&B Cap. 13.
-        """
+        
         current_values = self.critic(states).squeeze(1)
         with torch.no_grad():
             next_values = self.critic(next_states).squeeze(1)

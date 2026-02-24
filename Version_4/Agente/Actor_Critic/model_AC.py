@@ -4,18 +4,6 @@ from typing import Tuple
 
 
 class ActorNetwork(nn.Module):
-    """
-    Red Actor para Actor-Critic estocástico (Sutton & Barto, Cap. 13).
-    
-    Implementa una política estocástica Gaussiana:
-        π(a|s) = N(μ(s), σ(s))
-    
-    El Actor produce media (mu) y log_std para cada dimensión de acción.
-    La exploración es inherente a la distribución (no necesita ruido externo).
-    
-    Referencia: Sutton, R. S., & Barto, A. G. (2018). Reinforcement Learning: 
-                An Introduction (2nd ed.). MIT Press. Chapter 13.
-    """
 
     def __init__(
         self,
@@ -66,11 +54,6 @@ class ActorNetwork(nn.Module):
         nn.init.constant_(self.log_std_head.bias, 0.0)
 
     def forward(self, state: torch.Tensor):
-        """
-        Returns:
-            mu: media de la política (batch, action_dim)
-            std: desviación estándar (batch, action_dim)
-        """
         if len(state.shape) == 1:
             state = state.unsqueeze(0)
 
@@ -88,10 +71,6 @@ class ActorNetwork(nn.Module):
         return torch.distributions.Normal(mu, std)
 
     def sample_action(self, state: torch.Tensor):
-        """
-        Muestrea acción y calcula log_prob.
-        Retorna: action (numpy), log_prob (tensor con gradiente)
-        """
         dist = self.get_distribution(state)
         action = dist.sample()
         action_clipped = torch.clamp(action, -1.0, 1.0)
@@ -100,15 +79,6 @@ class ActorNetwork(nn.Module):
 
 
 class CriticNetwork(nn.Module):
-    """
-    Red Critic para Actor-Critic estocástico - estima V(s).
-    
-    A diferencia de DDPG (que estima Q(s,a)), este Critic estima
-    el valor de estado V(s), consistente con Sutton & Barto Cap. 13.
-    
-    La ventaja A(s,a) = r + γV(s') - V(s) se calcula en el algoritmo.
-    """
-
     def __init__(
         self,
         state_dim: int,
