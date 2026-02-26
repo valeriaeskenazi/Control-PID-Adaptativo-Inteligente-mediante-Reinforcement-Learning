@@ -81,6 +81,10 @@ class ACTrainer:
         self.actor_losses = []
         self.critic_losses = []
         self.advantage_means = []
+        self.episode_max_overshoots = []
+        self.kp_history = []
+        self.ki_history = []
+        self.kd_history = []
 
         self.best_reward = -float('inf')
 
@@ -114,9 +118,15 @@ class ACTrainer:
             self.episode_rewards.append(episode_reward)
             self.episode_lengths.append(episode_length)
             self.episode_energies.append(episode_metrics.get('energy', 0))
+            if self.architecture == 'simple':
+                self.kp_history.append(episode_metrics.get('kp', 1.0))
+                self.ki_history.append(episode_metrics.get('ki', 0.1))
+                self.kd_history.append(episode_metrics.get('kd', 0.01))
+            self.episode_max_overshoots.append(episode_metrics.get('max_overshoot', 0))
             self.actor_losses.append(episode_metrics.get('actor_loss', 0))
             self.critic_losses.append(episode_metrics.get('critic_loss', 0))
             self.advantage_means.append(episode_metrics.get('advantage_mean', 0))
+            
 
             if episode % self.log_freq == 0:
                 self._log_episode(episode, episode_reward, episode_length, episode_metrics)
@@ -152,6 +162,7 @@ class ACTrainer:
                 action = self.agent_ctrl.select_action(state, training=training)
                 next_state, reward, terminated, truncated, info = self.env.step(action)
                 done = terminated or truncated
+                
 
                 if training:
                     experience = Experience(state, action, reward, next_state, done)
@@ -197,6 +208,14 @@ class ACTrainer:
             'advantage_mean': np.mean(advantage_means) if advantage_means else 0,
             'energy': episode_energy,
         }
+        # PIDs finales del episodio
+        if self.architecture == 'simple':
+            pid_params_0 = self.env.pid_controllers[0].get_params()
+            pid_params_1 = self.env.pid_controllers[1].get_params()
+            episode_metrics['kp'] = (pid_params_0[0] + pid_params_1[0]) / 2
+            episode_metrics['ki'] = (pid_params_0[1] + pid_params_1[1]) / 2
+            episode_metrics['kd'] = (pid_params_0[2] + pid_params_1[2]) / 2
+
 
         return episode_reward, episode_length, episode_metrics
 
