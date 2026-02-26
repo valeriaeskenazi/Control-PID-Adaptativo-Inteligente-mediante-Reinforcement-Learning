@@ -9,6 +9,7 @@ from ..memory import SimpleReplayBuffer, PriorityReplayBuffer
 from ..DQN.algorithm_DQN import DQNAgent
 from ..DDPG.algorithm_DDPG import DDPGAgent
 from ..Actor_Critic.algorithm_AC import ACAgent
+from .algorithm_PPO import PPOAgent
 
 
 class PPOTrainer:
@@ -78,6 +79,15 @@ class PPOTrainer:
                     hidden_dims=config['agent_ctrl_config'].get('hidden_dims', (128, 64)),
                     device=config['agent_ctrl_config'].get('device', 'cpu')
                 )
+            elif ctrl_algo == 'ppo':
+                self.agent_ctrl = PPOAgent(
+                    state_dim=config['agent_ctrl_config']['state_dim'],
+                    action_dim=config['agent_ctrl_config']['action_dim'],
+                    agent_role='ctrl',
+                    n_vars=config['agent_ctrl_config']['n_vars'],
+                    hidden_dims=config['agent_ctrl_config'].get('hidden_dims', (128, 64)),
+                    device=config['agent_ctrl_config'].get('device', 'cpu')
+    )    
 
             self.agent_ctrl.load(ctrl_checkpoint)
             self.env.agente_ctrl = self.agent_ctrl
