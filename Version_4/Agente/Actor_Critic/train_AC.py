@@ -6,7 +6,7 @@ from pathlib import Path
 from Environment import PIDControlEnv_simple, PIDControlEnv_complex
 from .algorithm_AC import ACAgent
 from ..memory import Experience, SimpleReplayBuffer, PriorityReplayBuffer
-from DQN.algorithm_DQN import DQNAgent
+from ..DQN.algorithm_DQN import DQNAgent
 
 
 
