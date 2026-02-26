@@ -5,7 +5,9 @@ from pathlib import Path
 
 from Environment import PIDControlEnv_simple, PIDControlEnv_complex
 from .algorithm_AC import ACAgent
-from ..memory import Experience, SimpleReplayBuffer
+from ..memory import Experience, SimpleReplayBuffer, PriorityReplayBuffer
+from DQN.algorithm_DQN import DQNAgent
+
 
 
 class ACTrainer:
@@ -37,8 +39,6 @@ class ACTrainer:
             # CTRL pre-entrenado (DQN por defecto)
             ctrl_algo = config['agent_ctrl_config'].get('algorithm', 'dqn')
             if ctrl_algo == 'dqn':
-                from .algorithm_DQN import DQNAgent
-                from ..memory import SimpleReplayBuffer, PriorityReplayBuffer
                 device = config['agent_ctrl_config'].get('device', 'cpu')
                 buffer_type = config['agent_ctrl_config'].get('buffer_type', 'simple')
                 buffer_size = config['agent_ctrl_config'].get('buffer_size', 10000)
