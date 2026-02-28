@@ -68,22 +68,49 @@ class RewardCalculator:
                                errors: List[float],
                                tiempos: List[float],
                                overshoots: List[float],
-                               energy: float) -> float:
+                               energy: float,
+                               stability: Optional[Dict]) -> float:
+        
+        n_vars = len(errors)
 
-        # Promedios
-        mean_error = sum(errors) / len(errors) if errors else 0
-        mean_tiempo = sum(tiempos) / len(tiempos) if tiempos else 0
-        mean_overshoot = sum(overshoots) / len(overshoots) if overshoots else 0
-        
-        # Reward (todos los componentes son penalizaciones)
-        reward = (
-            -self.weights['error'] * mean_error +
-            -self.weights['tiempo'] * mean_tiempo +
-            -self.weights['overshoot'] * mean_overshoot +
-            -self.weights['energy'] * energy
-        )
-        
-        return reward
+        # Determinar vars_ok para el ponderado (si no hay stability, todas iguales)
+        if stability is not None:
+            vars_ok = stability['vars_ok']
+            ratio = stability['ratio']
+        else:
+            vars_ok = [False] * n_vars
+            ratio = 0.0
+
+        # Reward por variable
+        rewards_por_var = []
+        for i in range(n_vars):
+            max_e = self.max_errors[i] if i < len(self.max_errors) else 1.0
+            max_e = max(max_e, 1e-8)
+
+            # Normalizar a [0, 1]
+            # Diferencia clave con script anterior: normalizo cada peso por separado para que cada componente tenga un impacto relativo consistente, independientemente de la escala de las variables
+            error_norm     = np.clip(errors[i] / max_e, 0.0, 1.0)
+            tiempo_norm    = np.clip(tiempos[i] / self.max_time, 0.0, 1.0) if self.max_time > 0 else 0.0
+            overshoot_norm = np.clip(overshoots[i] / 100.0, 0.0, 1.0)
+            # energy ya viene normalizada del ambiente
+
+            r_i = -(
+                self.weights['error']     * error_norm     +
+                self.weights['tiempo']    * tiempo_norm    +
+                self.weights['overshoot'] * overshoot_norm +
+                self.weights['energy']    * energy / max(n_vars, 1)  # distribuir energía
+            )
+
+            # Ponderado: variable que NO cumple pesa más (factor 1.5)
+            # variable que SÍ cumple pesa menos (factor 0.5) para incentivar al agente a mejorar las que no cumplen
+            peso = 0.5 if vars_ok[i] else 1.5
+            rewards_por_var.append(r_i * peso)
+
+        reward_base = sum(rewards_por_var) / n_vars
+
+        # Multiplicador global de estabilidad
+        multiplicador = self._stability_multiplier(ratio)
+        return reward_base * multiplicador
     
     def _calculate_episode_reward(self, 
                                   errors: List[float],
