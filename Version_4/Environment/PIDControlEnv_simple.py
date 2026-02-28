@@ -138,8 +138,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         ## Recompensa
         self.reward_calculator = RewardCalculator(
             weights=config.get('reward_weights', None),
-            manipulable_ranges=self.manipulable_ranges,
-            dead_band=config.get('reward_dead_band', 0.02)
+            ranges=self.manipulable_ranges,
+            dead_band=config.get('reward_dead_band', 0.02),
+            max_time=config.get('max_time_detector', 1800.0)
         )
             
     def _get_observation(self):
@@ -283,7 +284,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         truncated = self._check_truncated()
 
         # 5. CALCULAR RECOMPENSA (usa self.tiempo_respuesta)
-        reward = self._calculate_reward(energy_step, terminated, truncated)
+        reward = self._calculate_reward(energy_step, terminated, truncated,
+                                trajs_pv=resultado_multi['trayectorias_pv'],
+                                trajs_control=resultado_multi['trayectorias_control'])
         
         # 6. OBTENER OBSERVACIÓN E INFO
         observation = self._get_observation()
@@ -317,23 +320,6 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         # Episodio se trunca si alcanza max_steps
         return self.current_step >= self.max_steps
     
-    #def _check_terminated(self) -> bool:
-    #    threshold = 0.02  # 2% de error relativo
-    #    
-        # Éxito: todas las variables dentro del threshold
-    #    errors_relativo = [
-    #        abs(pv - sp) / abs(sp) if sp != 0 else abs(pv - sp)
-    #        for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)
-    #    ]
-    #    success = all(error < threshold for error in errors_relativo)
-        
-        # Fallo: alguna variable fuera de rango físico
-    #    failure = any(
-    #        pv < rango[0] or pv > rango[1]
-    #        for pv, rango in zip(self.manipulable_pvs, self.manipulable_ranges)
-    #    )
-        
-    #    return success or failure
     def _check_terminated(self) -> bool:
         failure = any(
             pv < rango[0] or pv > rango[1]
@@ -361,10 +347,9 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             energy = sum(abs(u) for u in resultado['trayectoria_control']) * self.dt_sim
             self.energy_accumulated += energy    
 
-    def _calculate_reward(self, energy_step, terminated, truncated) -> float:
-
+    def _calculate_reward(self, energy_step, terminated, truncated,
+                      trajs_pv=None, trajs_control=None) -> float:
         errors = [abs(pv - sp) for pv, sp in zip(self.manipulable_pvs, self.manipulable_setpoints)]
-        
         return self.reward_calculator.calculate(
             errors=errors,
             tiempos_respuesta=self.tiempo_respuesta,
@@ -373,5 +358,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
             pvs=self.manipulable_pvs,
             setpoints=self.manipulable_setpoints,
             terminated=terminated,
-            truncated=truncated
+            truncated=truncated,
+            trajs_pv=trajs_pv,
+            trajs_control=trajs_control
         )  
