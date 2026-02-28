@@ -136,6 +136,13 @@ class RewardCalculator:
             return step_reward * 2.0   # Fallo: duplica penalización
         else:  # truncated
             return step_reward * 1.2   # Truncado: penalización leve extra
+        
+    def _stability_multiplier(self, ratio: float) -> float:
+        """
+        Convierte el ratio de estabilidad en un multiplicador para el reward.
+        Interpolación lineal entre [1.5, 0.5].
+        """
+        return 1.5 - ratio  # ratio=0 → 1.5, ratio=0.5 → 1.0, ratio=1.0 → 0.5    
     
     def update_weights(self, new_weights: dict):
         """Actualizar pesos de los componentes."""
