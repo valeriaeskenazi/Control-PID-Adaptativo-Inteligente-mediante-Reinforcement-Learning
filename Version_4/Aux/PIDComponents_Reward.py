@@ -119,27 +119,23 @@ class RewardCalculator:
                                   energy: float,
                                   pvs: List[float],
                                   setpoints: List[float],
-                                  terminated: bool) -> float:
+                                  terminated: bool,
+                                  stability: Optional[Dict]) -> float:
 
-        # Base: reward del step
-        step_reward = self._calculate_step_reward(errors, tiempos, overshoots, energy)
-        
-        # Verificar si todas las variables llegaron al objetivo (dentro del dead_band)
+        step_reward = self._calculate_step_reward(errors, tiempos, overshoots,
+                                                  energy, stability)
+
         success = all(
             abs(pv - sp) / abs(sp) < self.dead_band if sp != 0 else abs(pv) < self.dead_band
             for pv, sp in zip(pvs, setpoints)
         )
-        
-        # Amplificar reward según resultado
+
         if terminated and success:
-            # Éxito: duplica el reward (si step_reward es negativo, lo hace menos negativo)
-            return step_reward * 2.0
+            return step_reward * 0.5   # Éxito: reduce penalización a la mitad
         elif terminated and not success:
-            # Fallo: duplica la penalización (hace el reward más negativo)
-            return step_reward * 2.0
+            return step_reward * 2.0   # Fallo: duplica penalización
         else:  # truncated
-            # Truncado: 20% más penalización por no terminar
-            return step_reward * 1.2
+            return step_reward * 1.2   # Truncado: penalización leve extra
     
     def update_weights(self, new_weights: dict):
         """Actualizar pesos de los componentes."""
