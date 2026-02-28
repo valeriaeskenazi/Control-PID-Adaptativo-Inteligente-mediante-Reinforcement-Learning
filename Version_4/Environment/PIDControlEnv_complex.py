@@ -154,8 +154,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         ## Recompensa
         self.reward_calculator = RewardCalculator(
             weights=config.get('reward_weights', None),
-            manipulable_ranges=self.manipulable_ranges,
-            dead_band=config.get('reward_dead_band', 0.02)
+            ranges=self.target_ranges,
+            dead_band=config.get('reward_dead_band', 0.02),
+            max_time=config.get('max_time_detector', 1800.0)
         )
             
     def _get_observation(self):            
@@ -375,21 +376,10 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         return self.current_step >= self.max_steps
     
     def _check_terminated(self) -> bool:
-        threshold = 0.02  # 2% de error relativo
-        
-        # Éxito: todas las variables dentro del threshold
-        errors_relativo = [
-            abs(pv - sp) / abs(sp) if sp != 0 else abs(pv - sp)
-            for pv, sp in zip(self.target_pvs, self.target_setpoints)
-        ]
-        success = all(error < threshold for error in errors_relativo)
-        
-        # Fallo: alguna variable fuera de rango físico
         failure = any(
             pv < rango[0] or pv > rango[1]
             for pv, rango in zip(self.target_pvs, self.target_ranges)
         )
-        
-        return success or failure
+        return failure
 
     
