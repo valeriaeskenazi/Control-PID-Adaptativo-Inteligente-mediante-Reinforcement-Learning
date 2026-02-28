@@ -1,13 +1,16 @@
 import numpy as np
-from typing import List
+from typing import List, Dict, Optional
+from .PIDComponentes_StabilityCriteria import StabilityCriteria
 
 
 class RewardCalculator:    
     def __init__(self, 
-                 weights=None,
-                 manipulable_ranges=None,
-                 dead_band=0.02):
-
+                 weights: Optional[Dict] = None,
+                 manipulable_ranges: Optional[List] = None, # Lista de tuplas (min, max) para cada variable controlada, usada para normalizar el error
+                 dead_band: float = 0.02, # Porcentaje de error relativo al setpoint para considerar que se llegó al objetivo
+                 max_time: float = 1800.0, # Tiempo máximo esperado para alcanzar el setpoint (en segundos), usado para normalizar el tiempo de respuesta
+                 stability_config: Optional[Dict] = None): # Dict con parámetros para StabilityCriteria (opcional). Si None, usa valores por defecto
+        
         # Pesos por defecto
         if weights is None:
             self.weights = {
@@ -19,27 +22,47 @@ class RewardCalculator:
         else:
             self.weights = weights
         
-        self.manipulable_ranges = manipulable_ranges
+        self.manipulable_ranges = manipulable_ranges or [(0.0, 100.0)]
         self.dead_band = dead_band
-    
-    def calculate(self, 
-                  errors: List[float],
-                  tiempos_respuesta: List[float],
-                  overshoots: List[float],
-                  energy_step: float,
+        self.max_time = max_time
+
+        # Max error posible por variable (para normalizar)
+        self.max_errors = [r[1] - r[0] for r in self.manipulable_ranges]
+
+        # Componente de estabilidad
+        sc = stability_config or {}
+        self.stability_checker = StabilityCriteria(
+            error_increase_tolerance=sc.get('error_increase_tolerance', 1.5),
+            max_sign_changes_ratio=sc.get('max_sign_changes_ratio', 0.2),
+            max_abrupt_change_ratio=sc.get('max_abrupt_change_ratio', 0.05),
+            abrupt_change_threshold=sc.get('abrupt_change_threshold', 0.3)
+        )
+
+    def calculate(self,
+                  errors: List[float], # Error absoluto por variable [|e1|, |e2|, ...]
+                  tiempos_respuesta: List[float], # Tiempo de respuesta por variable [t1, t2, ...]
+                  overshoots: List[float], # Overshoot relativo por variable [(pv1 - sp1)/sp1, (pv2 - sp2)/sp2, ...]
+                  energy_step: float, # Energía consumida en el step actual (normalizada)
                   pvs: List[float],
                   setpoints: List[float],
-                  terminated: bool,
-                  truncated: bool) -> float:
+                  terminated: bool, #True si el episodio terminó (éxito o fallo)
+                  truncated: bool, # True si se alcanzó max_steps
+                  trajs_pv: Optional[List[List[float]]] = None, #Trayectorias de PV del ResponseTimeDetector
+                  trajs_control: Optional[List[List[float]]] = None) -> float: #Trayectorias de control del ResponseTimeDetector
         
-        # REWARD INTERMEDIO (durante el episodio)
+        # Evaluar estabilidad si se proporcionan trayectorias
+        stability = None
+        if trajs_pv is not None and trajs_control is not None:
+            stability = self.stability_checker.check_all(trajs_pv, trajs_control, setpoints)
+
         if not terminated and not truncated:
-            return self._calculate_step_reward(errors, tiempos_respuesta, overshoots, energy_step)
-        
-        # REWARD FINAL (episodio terminó)
+            return self._calculate_step_reward(errors, tiempos_respuesta, overshoots,
+                                               energy_step, stability)
         else:
-            return self._calculate_episode_reward(errors, tiempos_respuesta, overshoots, 
-                                                   energy_step, pvs, setpoints, terminated)
+            return self._calculate_episode_reward(errors, tiempos_respuesta, overshoots,
+                                                  energy_step, pvs, setpoints,
+                                                  terminated, stability)
+
     
     def _calculate_step_reward(self, 
                                errors: List[float],
