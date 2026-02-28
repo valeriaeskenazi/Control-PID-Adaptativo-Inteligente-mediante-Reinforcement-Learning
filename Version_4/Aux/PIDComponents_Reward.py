@@ -6,7 +6,7 @@ from .PIDComponentes_StabilityCriteria import StabilityCriteria
 class RewardCalculator:    
     def __init__(self, 
                  weights: Optional[Dict] = None,
-                 manipulable_ranges: Optional[List] = None, # Lista de tuplas (min, max) para cada variable controlada, usada para normalizar el error
+                 ranges: Optional[List] = None, # Lista de tuplas (min, max) para cada variable controlada, usada para normalizar el error
                  dead_band: float = 0.02, # Porcentaje de error relativo al setpoint para considerar que se llegó al objetivo
                  max_time: float = 1800.0, # Tiempo máximo esperado para alcanzar el setpoint (en segundos), usado para normalizar el tiempo de respuesta
                  stability_config: Optional[Dict] = None): # Dict con parámetros para StabilityCriteria (opcional). Si None, usa valores por defecto
@@ -22,12 +22,12 @@ class RewardCalculator:
         else:
             self.weights = weights
         
-        self.manipulable_ranges = manipulable_ranges or [(0.0, 100.0)]
+        self.ranges = ranges or [(0.0, 100.0)]
         self.dead_band = dead_band
         self.max_time = max_time
 
         # Max error posible por variable (para normalizar)
-        self.max_errors = [r[1] - r[0] for r in self.manipulable_ranges]
+        self.max_errors = [r[1] - r[0] for r in self.ranges]
 
         # Componente de estabilidad
         sc = stability_config or {}
