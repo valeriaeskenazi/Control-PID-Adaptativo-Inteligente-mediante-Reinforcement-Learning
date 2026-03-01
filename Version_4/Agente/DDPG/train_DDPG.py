@@ -89,6 +89,7 @@ class DDPGTrainer:
         self.kp_history = []
         self.ki_history = []
         self.kd_history = []
+        self.eval_trajectories = []
 
         self.best_reward = -float('inf')
 
@@ -152,6 +153,10 @@ class DDPGTrainer:
                 self._save_checkpoint(episode, best=False)
 
     def _run_episode(self, episode: int, training: bool = True) -> tuple:
+
+        pv_history_episode = []
+        sp_history_episode = []
+
         # Resetear ruido OU al inicio de cada episodio
         if self.architecture == 'simple' and hasattr(self.agent_ctrl, 'reset_noise'):
             self.agent_ctrl.reset_noise()
@@ -180,6 +185,8 @@ class DDPGTrainer:
             if self.architecture == 'simple':
                 action = self.agent_ctrl.select_action(state, training=training)
                 next_state, reward, terminated, truncated, info = self.env.step(action)
+                pv_history_episode.append(self.env.manipulable_pvs.copy())
+                sp_history_episode.append(self.env.manipulable_setpoints.copy())
                 done = terminated or truncated
 
                 if training:
@@ -231,7 +238,9 @@ class DDPGTrainer:
             'actor_loss': np.mean(actor_losses) if actor_losses else 0,
             'critic_loss': np.mean(critic_losses) if critic_losses else 0,
             'energy': episode_energy,
-            'max_overshoot': episode_max_overshoot
+            'max_overshoot': episode_max_overshoot,
+            'pv_history': pv_history_episode,   
+            'sp_history': sp_history_episode    
         }
 
         if self.architecture == 'simple':
@@ -245,9 +254,17 @@ class DDPGTrainer:
 
     def _evaluate(self, n_eval_episodes: int = 5) -> float:
         eval_rewards = []
-        for _ in range(n_eval_episodes):
-            episode_reward, _, _ = self._run_episode(episode=-1, training=False)
+        for idx in range(n_eval_episodes):
+            episode_reward, _, episode_metrics = self._run_episode(episode=-1, training=False)
             eval_rewards.append(episode_reward)
+            
+            if idx == 0:
+                self.eval_trajectories.append({
+                    'episode': len(self.episode_rewards),
+                    'pv_history': episode_metrics['pv_history'],
+                    'sp_history': episode_metrics['sp_history']
+                })
+        
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
         return mean_reward

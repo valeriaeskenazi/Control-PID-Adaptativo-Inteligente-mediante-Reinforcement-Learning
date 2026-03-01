@@ -119,6 +119,7 @@ class PPOTrainer:
         self.kp_history = []
         self.ki_history = []
         self.kd_history = []
+        self.eval_trajectories = []
 
         self.best_reward = -float('inf')
 
@@ -182,6 +183,9 @@ class PPOTrainer:
                 self._save_checkpoint(episode, best=False)
 
     def _run_episode(self, episode: int, training: bool = True) -> tuple:
+        pv_history_episode = []
+        sp_history_episode = []
+
         if self.architecture == 'simple':
             state = self.env.reset()[0]
         else:
@@ -223,6 +227,8 @@ class PPOTrainer:
 
                 action = {'ctrl': action_ctrl, 'orch': action_orch}
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
+                pv_history_episode.append(self.env.manipulable_pvs.copy())
+                sp_history_episode.append(self.env.manipulable_setpoints.copy())
                 done = terminated or truncated
 
                 next_state_ctrl = next_obs['ctrl']
@@ -248,6 +254,8 @@ class PPOTrainer:
             'clip_fraction': np.mean([m.get('clip_fraction', 0) for m in episode_metrics_list]) if episode_metrics_list else 0,
             'energy':        episode_energy,
             'max_overshoot': episode_max_overshoot,
+            'pv_history': pv_history_episode,  
+            'sp_history': sp_history_episode    
         }
 
         if self.architecture == 'simple':
@@ -261,9 +269,17 @@ class PPOTrainer:
 
     def _evaluate(self, n_eval_episodes: int = 5) -> float:
         eval_rewards = []
-        for _ in range(n_eval_episodes):
-            episode_reward, _, _ = self._run_episode(episode=-1, training=False)
+        for idx in range(n_eval_episodes):
+            episode_reward, _, episode_metrics = self._run_episode(episode=-1, training=False)
             eval_rewards.append(episode_reward)
+            
+            if idx == 0:
+                self.eval_trajectories.append({
+                    'episode': len(self.episode_rewards),
+                    'pv_history': episode_metrics['pv_history'],
+                    'sp_history': episode_metrics['sp_history']
+                })
+        
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
         return mean_reward
