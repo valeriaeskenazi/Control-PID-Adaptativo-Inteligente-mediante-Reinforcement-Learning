@@ -280,6 +280,9 @@ class DDPGTrainer:
                 episode_metrics[f'ki_var{i}'] = params[1]
                 episode_metrics[f'kd_var{i}'] = params[2]
 
+        # Normalizar por longitud del episodio
+        episode_reward = episode_reward / episode_length if episode_length > 0 else 0        
+
         return episode_reward, episode_length, episode_metrics
 
     def _evaluate(self, n_eval_episodes: int = 5) -> float:
@@ -296,7 +299,7 @@ class DDPGTrainer:
                 })
         
         if self.use_wandb:
-            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
+            wandb.log({'eval_reward': mean_reward})
 
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")

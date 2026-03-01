@@ -70,7 +70,7 @@ class ACTrainer:
 
         # ENTRENAMIENTO
         self.n_episodes = config.get('n_episodes', 1000)
-        self.max_steps_per_episode = config['env_config'].get('max_steps', 200)
+        self.max_steps_per_episode = config.get('max_steps_per_episode', 200)
         self.eval_freq = config.get('eval_frequency', 50)
         self.save_freq = config.get('save_frequency', 100)
         self.log_freq = config.get('log_frequency', 10)
@@ -268,6 +268,8 @@ class ACTrainer:
                 episode_metrics[f'ki_var{i}'] = params[1]
                 episode_metrics[f'kd_var{i}'] = params[2]
 
+        # Normalizar por longitud del episodio
+        episode_reward = episode_reward / episode_length if episode_length > 0 else 0
 
         return episode_reward, episode_length, episode_metrics
 
@@ -285,7 +287,7 @@ class ACTrainer:
                 })
 
         if self.use_wandb:
-            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
+            wandb.log({'eval_reward': mean_reward})
 
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")

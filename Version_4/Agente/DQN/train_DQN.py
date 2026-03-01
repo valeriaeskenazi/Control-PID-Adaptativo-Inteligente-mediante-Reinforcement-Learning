@@ -306,7 +306,9 @@ class DQNTrainer:
                 'orch_loss': np.mean(orch_losses) if orch_losses else 0,
                 'orch_epsilon': self.agent_orch.get_epsilon(),
             })
-
+        # Normalizar por longitud del episodio
+        episode_reward = episode_reward / episode_length if episode_length > 0 else 0
+        
         return episode_reward, episode_length, episode_metrics
     
     def _evaluate(self, n_eval_episodes: int = 5) -> float:
@@ -335,7 +337,7 @@ class DQNTrainer:
 
         # DESPUÉS wandb
         if self.use_wandb:
-            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
+            wandb.log({'eval_reward': mean_reward})
 
         return mean_reward, self.evals_without_improvement >= self.early_stopping_patience
     
