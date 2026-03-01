@@ -105,6 +105,14 @@ class PPOTrainer:
         self.save_freq = config.get('save_frequency', 100)
         self.log_freq = config.get('log_frequency', 10)
 
+        # EARLY STOPPING
+        self.early_stopping_patience = config.get('early_stopping_patience', 10)
+        early_stopping_min_delta_pct = config.get('early_stopping_min_delta_pct', 0.01)
+        sum_weights = sum(self.env.reward_calculator.weights.values())
+        self.early_stopping_min_delta = early_stopping_min_delta_pct * sum_weights * 1.5
+        self.best_eval_reward = -float('inf')
+        self.evals_without_improvement = 0
+
         self.checkpoint_dir = Path(config.get('checkpoint_dir', 'checkpoints'))
         self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
@@ -178,13 +186,17 @@ class PPOTrainer:
                 self._log_episode(episode, episode_reward, episode_length, episode_metrics)
 
             if episode % self.eval_freq == 0 and episode > 0:
-                eval_reward = self._evaluate()
+                eval_reward, stop = self._evaluate()
                 if eval_reward > self.best_reward:
                     self.best_reward = eval_reward
                     self._save_checkpoint(episode, best=True)
-
+                if stop:
+                    print(f"Early stopping en episodio {episode}")
+                    break
+            
+            # Checkpoint periódico
             if episode % self.save_freq == 0 and episode > 0:
-                self._save_checkpoint(episode, best=False)
+                self._save_checkpoint(episode, best=False) 
 
             if self.use_wandb:
                 log_dict = {
@@ -301,12 +313,21 @@ class PPOTrainer:
                     'sp_history': episode_metrics['sp_history']
                 })
         
+        
+        if self.use_wandb:
+            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
+
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
 
-        if self.use_wandb:
-            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
-        return mean_reward
+        if mean_reward > self.best_eval_reward + self.early_stopping_min_delta:
+            self.best_eval_reward = mean_reward
+            self.evals_without_improvement = 0
+        else:
+            self.evals_without_improvement += 1
+            print(f"  Sin mejora: {self.evals_without_improvement}/{self.early_stopping_patience}")
+
+        return mean_reward, self.evals_without_improvement >= self.early_stopping_patience
 
     def _log_episode(self, episode: int, reward: float, length: int, metrics: Dict[str, float]):
         agent = self.agent_orch if self.architecture == 'jerarquica' else self.agent_ctrl
