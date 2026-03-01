@@ -118,15 +118,21 @@ class ACTrainer:
             self.episode_rewards.append(episode_reward)
             self.episode_lengths.append(episode_length)
             self.episode_energies.append(episode_metrics.get('energy', 0))
-            if self.architecture == 'simple':
-                self.kp_history.append(episode_metrics.get('kp', 1.0))
-                self.ki_history.append(episode_metrics.get('ki', 0.1))
-                self.kd_history.append(episode_metrics.get('kd', 0.01))
             self.episode_max_overshoots.append(episode_metrics.get('max_overshoot', 0))
             self.actor_losses.append(episode_metrics.get('actor_loss', 0))
             self.critic_losses.append(episode_metrics.get('critic_loss', 0))
             self.advantage_means.append(episode_metrics.get('advantage_mean', 0))
             
+            if self.architecture == 'simple':
+                n_vars = len(self.env.pid_controllers)
+                if not self.kp_history:
+                    self.kp_history = [[] for _ in range(n_vars)]
+                    self.ki_history = [[] for _ in range(n_vars)]
+                    self.kd_history = [[] for _ in range(n_vars)]
+                for i in range(n_vars):
+                    self.kp_history[i].append(episode_metrics.get(f'kp_var{i}', 1.0))
+                    self.ki_history[i].append(episode_metrics.get(f'ki_var{i}', 0.1))
+                    self.kd_history[i].append(episode_metrics.get(f'kd_var{i}', 0.01))
 
             if episode % self.log_freq == 0:
                 self._log_episode(episode, episode_reward, episode_length, episode_metrics)
@@ -155,6 +161,7 @@ class ACTrainer:
         critic_losses = []
         advantage_means = []
         episode_energy = 0
+        episode_max_overshoot = 0
 
         while not done and episode_length < self.max_steps_per_episode:
 
@@ -174,6 +181,9 @@ class ACTrainer:
                         advantage_means.append(metrics.get('advantage_mean', 0))
 
                 episode_energy += info.get('energy', 0)
+                if 'overshoot_manipulable' in info:
+                    current_overshoots = info['overshoot_manipulable']
+                    episode_max_overshoot = max(episode_max_overshoot, max(current_overshoots))
                 state = next_state
 
             else:
@@ -207,14 +217,15 @@ class ACTrainer:
             'critic_loss': np.mean(critic_losses) if critic_losses else 0,
             'advantage_mean': np.mean(advantage_means) if advantage_means else 0,
             'energy': episode_energy,
+            'max_overshoot': episode_max_overshoot
         }
         # PIDs finales del episodio
         if self.architecture == 'simple':
-            pid_params_0 = self.env.pid_controllers[0].get_params()
-            pid_params_1 = self.env.pid_controllers[1].get_params()
-            episode_metrics['kp'] = (pid_params_0[0] + pid_params_1[0]) / 2
-            episode_metrics['ki'] = (pid_params_0[1] + pid_params_1[1]) / 2
-            episode_metrics['kd'] = (pid_params_0[2] + pid_params_1[2]) / 2
+            for i, pid in enumerate(self.env.pid_controllers):
+                params = pid.get_params()
+                episode_metrics[f'kp_var{i}'] = params[0]
+                episode_metrics[f'ki_var{i}'] = params[1]
+                episode_metrics[f'kd_var{i}'] = params[2]
 
 
         return episode_reward, episode_length, episode_metrics
