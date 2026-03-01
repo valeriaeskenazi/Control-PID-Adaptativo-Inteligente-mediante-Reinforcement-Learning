@@ -145,10 +145,16 @@ class DQNTrainer:
                 self.epsilons.append(episode_metrics.get('orch_epsilon', 0))  
             
             # Guardar PID params
-            if self.architecture == 'simple':
-                self.kp_history.append(episode_metrics.get('kp', 1.0))
-                self.ki_history.append(episode_metrics.get('ki', 0.1))
-                self.kd_history.append(episode_metrics.get('kd', 0.01))
+            n_vars = len(self.env.pid_controllers)
+            # Inicializar listas por variable si no existen
+            if not self.kp_history:
+                self.kp_history = [[] for _ in range(n_vars)]
+                self.ki_history = [[] for _ in range(n_vars)]
+                self.kd_history = [[] for _ in range(n_vars)]
+            for i in range(n_vars):
+                self.kp_history[i].append(episode_metrics.get(f'kp_var{i}', 1.0))
+                self.ki_history[i].append(episode_metrics.get(f'ki_var{i}', 0.1))
+                self.kd_history[i].append(episode_metrics.get(f'kd_var{i}', 0.01))
 
             # Logging
             if episode % self.log_freq == 0:
@@ -267,10 +273,11 @@ class DQNTrainer:
         }
 
         if self.architecture == 'simple':
-            pid_params = self.env.pid_controllers[0].get_params()
-            episode_metrics['kp'] = pid_params[0]
-            episode_metrics['ki'] = pid_params[1]
-            episode_metrics['kd'] = pid_params[2]
+            for i, pid in enumerate(self.env.pid_controllers):
+                params = pid.get_params()
+                episode_metrics[f'kp_var{i}'] = params[0]
+                episode_metrics[f'ki_var{i}'] = params[1]
+                episode_metrics[f'kd_var{i}'] = params[2]
 
         if self.architecture == 'jerarquica':
             episode_metrics.update({
