@@ -86,6 +86,9 @@ class DDPGTrainer:
         self.episode_max_overshoots = []
         self.actor_losses = []
         self.critic_losses = []
+        self.kp_history = []
+        self.ki_history = []
+        self.kd_history = []
 
         self.best_reward = -float('inf')
 
@@ -124,6 +127,17 @@ class DDPGTrainer:
             self.episode_max_overshoots.append(episode_metrics.get('max_overshoot', 0))
             self.actor_losses.append(episode_metrics.get('actor_loss', 0))
             self.critic_losses.append(episode_metrics.get('critic_loss', 0))
+
+            if self.architecture == 'simple':
+                n_vars = len(self.env.pid_controllers)
+                if not self.kp_history:
+                    self.kp_history = [[] for _ in range(n_vars)]
+                    self.ki_history = [[] for _ in range(n_vars)]
+                    self.kd_history = [[] for _ in range(n_vars)]
+                for i in range(n_vars):
+                    self.kp_history[i].append(episode_metrics.get(f'kp_var{i}', 1.0))
+                    self.ki_history[i].append(episode_metrics.get(f'ki_var{i}', 0.1))
+                    self.kd_history[i].append(episode_metrics.get(f'kd_var{i}', 0.01))
 
             if episode % self.log_freq == 0:
                 self._log_episode(episode, episode_reward, episode_length, episode_metrics)
@@ -177,6 +191,9 @@ class DDPGTrainer:
                         critic_losses.append(metrics.get('critic_loss', 0))
 
                 episode_energy += info.get('energy', 0)
+                if 'overshoot_manipulable' in info:
+                    current_overshoots = info['overshoot_manipulable']
+                    episode_max_overshoot = max(episode_max_overshoot, max(current_overshoots))
                 state = next_state
 
             # ARQUITECTURA JERÁRQUICA (ORCH DDPG + CTRL pre-entrenado)
@@ -216,6 +233,13 @@ class DDPGTrainer:
             'energy': episode_energy,
             'max_overshoot': episode_max_overshoot
         }
+
+        if self.architecture == 'simple':
+            for i, pid in enumerate(self.env.pid_controllers):
+                params = pid.get_params()
+                episode_metrics[f'kp_var{i}'] = params[0]
+                episode_metrics[f'ki_var{i}'] = params[1]
+                episode_metrics[f'kd_var{i}'] = params[2]
 
         return episode_reward, episode_length, episode_metrics
 
