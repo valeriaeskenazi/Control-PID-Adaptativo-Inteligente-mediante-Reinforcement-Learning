@@ -314,26 +314,28 @@ class DQNTrainer:
         for idx in range(n_eval_episodes):
             episode_reward, _, episode_metrics = self._run_episode(episode=-1, training=False)
             eval_rewards.append(episode_reward)
-            
             if idx == 0:
                 self.eval_trajectories.append({
                     'episode': len(self.episode_rewards),
                     'pv_history': episode_metrics['pv_history'],
                     'sp_history': episode_metrics['sp_history']
                 })
-        
-        if self.use_wandb:
-            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
 
+        # PRIMERO calcular mean_reward
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
 
+        # DESPUÉS early stopping
         if mean_reward > self.best_eval_reward + self.early_stopping_min_delta:
             self.best_eval_reward = mean_reward
             self.evals_without_improvement = 0
         else:
             self.evals_without_improvement += 1
             print(f"  Sin mejora: {self.evals_without_improvement}/{self.early_stopping_patience}")
+
+        # DESPUÉS wandb
+        if self.use_wandb:
+            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
 
         return mean_reward, self.evals_without_improvement >= self.early_stopping_patience
     
