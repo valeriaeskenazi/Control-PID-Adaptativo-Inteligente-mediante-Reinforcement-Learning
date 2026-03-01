@@ -71,7 +71,7 @@ class DDPGTrainer:
 
         # ENTRENAMIENTO
         self.n_episodes = config.get('n_episodes', 1000)
-        self.max_steps_per_episode = config.get('max_steps_per_episode', 200)
+        self.max_steps_per_episode = config['env_config'].get('max_steps', 200)
         self.eval_freq = config.get('eval_frequency', 50)
         self.save_freq = config.get('save_frequency', 100)
         self.log_freq = config.get('log_frequency', 10)
