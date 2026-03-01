@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from typing import Dict, Any, Optional
 from pathlib import Path
+import wandb
 
 from Environment import PIDControlEnv_simple, PIDControlEnv_complex
 from .algorithm_PPO import PPOAgent
@@ -107,6 +108,9 @@ class PPOTrainer:
         self.checkpoint_dir = Path(config.get('checkpoint_dir', 'checkpoints'))
         self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
+        # W&B logging
+        self.use_wandb = config.get('use_wandb', False)
+
         # ESTADÍSTICAS
         self.episode_rewards = []
         self.episode_lengths = []
@@ -181,6 +185,23 @@ class PPOTrainer:
 
             if episode % self.save_freq == 0 and episode > 0:
                 self._save_checkpoint(episode, best=False)
+
+            if self.use_wandb:
+                log_dict = {
+                    'reward':       episode_reward,
+                    'energy':       episode_metrics.get('energy', 0),
+                    'overshoot':    episode_metrics.get('max_overshoot', 0),
+                    'actor_loss':   episode_metrics.get('actor_loss', 0),
+                    'critic_loss':  episode_metrics.get('critic_loss', 0),
+                    'entropy':      episode_metrics.get('entropy', 0),
+                    'clip_fraction':episode_metrics.get('clip_fraction', 0),
+                }
+                if self.architecture == 'simple' and self.kp_history:
+                    for i in range(len(self.kp_history)):
+                        log_dict[f'kp_var{i}'] = self.kp_history[i][-1]
+                        log_dict[f'ki_var{i}'] = self.ki_history[i][-1]
+                        log_dict[f'kd_var{i}'] = self.kd_history[i][-1]
+                wandb.log(log_dict, step=episode)    
 
     def _run_episode(self, episode: int, training: bool = True) -> tuple:
         pv_history_episode = []
@@ -282,6 +303,9 @@ class PPOTrainer:
         
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
+
+        if self.use_wandb:
+            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
         return mean_reward
 
     def _log_episode(self, episode: int, reward: float, length: int, metrics: Dict[str, float]):

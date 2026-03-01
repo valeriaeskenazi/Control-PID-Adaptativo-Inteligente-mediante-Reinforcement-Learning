@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from typing import Dict, Any, Optional
 from pathlib import Path
-#import wandb
+import wandb
 from datetime import datetime
 
 
@@ -68,13 +68,7 @@ class DQNTrainer:
         self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
         
         # W&B logging
-        #self.use_wandb = config.get('use_wandb', False)
-        #if self.use_wandb:
-        #    wandb.init(
-        #        project=config.get('wandb_project', 'pid-dqn'),
-        #        name=config.get('run_name', f"dqn_{self.architecture}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"),
-        #        config=config
-        #    )
+        self.use_wandb = config.get('use_wandb', False)
 
         # ESTADÍSTICAS
         self.episode_rewards = []
@@ -155,7 +149,7 @@ class DQNTrainer:
             for i in range(n_vars):
                 self.kp_history[i].append(episode_metrics.get(f'kp_var{i}', 1.0))
                 self.ki_history[i].append(episode_metrics.get(f'ki_var{i}', 0.1))
-                self.kd_history[i].append(episode_metrics.get(f'kd_var{i}', 0.01))
+                self.kd_history[i].append(episode_metrics.get(f'kd_var{i}', 0.01))  
 
             # Logging
             if episode % self.log_freq == 0:
@@ -164,9 +158,6 @@ class DQNTrainer:
             # Evaluación
             if episode % self.eval_freq == 0 and episode > 0:
                 eval_reward = self._evaluate()
-                
-                #if self.use_wandb:
-                #    wandb.log({'eval_reward': eval_reward}, step=episode)
 
                 # Guardar mejor modelo
                 if eval_reward > self.best_reward:
@@ -177,8 +168,21 @@ class DQNTrainer:
             if episode % self.save_freq == 0 and episode > 0:
                 self._save_checkpoint(episode, best=False)
 
-        #if self.use_wandb:
-        #    wandb.finish()
+            # W&B
+            if self.use_wandb:
+                log_dict = {
+                    'reward':    episode_reward,
+                    'energy':    episode_metrics.get('energy', 0),
+                    'overshoot': episode_metrics.get('max_overshoot', 0),
+                    'epsilon':   episode_metrics.get('ctrl_epsilon', 0),
+                    'loss':      episode_metrics.get('ctrl_loss', 0),
+                }
+                if self.architecture == 'simple' and self.kp_history:
+                    for i in range(len(self.kp_history)):
+                        log_dict[f'kp_var{i}'] = self.kp_history[i][-1]
+                        log_dict[f'ki_var{i}'] = self.ki_history[i][-1]
+                        log_dict[f'kd_var{i}'] = self.kd_history[i][-1]
+                wandb.log(log_dict, step=episode)      
 
         
 
@@ -312,6 +316,10 @@ class DQNTrainer:
         
         mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
+
+        if self.use_wandb:
+            wandb.log({'eval_reward': mean_reward}, step=len(self.episode_rewards))
+
         return mean_reward
     
     def _log_episode(self, episode: int, reward: float, length: int, metrics: Dict[str, float]):
@@ -325,15 +333,6 @@ class DQNTrainer:
         if self.architecture == 'jerarquica':
             print(f"  ORCH Loss: {metrics['orch_loss']:.4f}")
             print(f"  ORCH Epsilon: {metrics['orch_epsilon']:.4f}")
-        
-        #if self.use_wandb:
-        #    log_dict = {
-        #        'episode': episode,
-        #        'reward': reward,
-        #        'episode_length': length,
-        #        **metrics
-        #    }
-            #wandb.log(log_dict, step=episode)
 
     def _save_checkpoint(self, episode: int, best: bool = False):
         """Guardar checkpoint."""
