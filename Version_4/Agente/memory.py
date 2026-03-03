@@ -68,6 +68,7 @@ class SimpleReplayBuffer(AbstractReplayBuffer):
 
         rewards = torch.FloatTensor(np.array([e.reward for e in batch])).to(self.device)
         next_states = torch.FloatTensor(np.array([e.next_state for e in batch])).to(self.device)
+        
         dones = torch.BoolTensor(np.array([e.done for e in batch])).to(self.device)
         
         return {
@@ -195,7 +196,7 @@ class PriorityReplayBuffer(AbstractReplayBuffer):
             actions = torch.FloatTensor(actions_np).to(self.device)
 
         rewards = torch.FloatTensor([e.reward for e in batch]).to(self.device)
-        next_states = torch.FloatTensor([e.next_state for e in batch]).to(self.device)
+        next_states = torch.FloatTensor(np.array([e.next_state for e in batch])).to(self.device)
         dones = torch.BoolTensor([e.done for e in batch]).to(self.device)
         weights_tensor = torch.FloatTensor(weights).to(self.device)
         
