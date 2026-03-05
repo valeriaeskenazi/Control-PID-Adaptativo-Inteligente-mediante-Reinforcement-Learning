@@ -130,6 +130,7 @@ class DQNAgent(AbstractValueBasedAgent):
                 next_q_max = next_q_values.max(dim=2)[0]
                 next_q_combined = next_q_max.mean(dim=1)
                 target_q = rewards + (self.gamma * next_q_combined * ~dones)
+                target_q = target_q.clamp(-50.0, 0.0) 
             
             # TD errors para priority buffer
             td_errors_tensor = current_q_combined - target_q
@@ -201,6 +202,7 @@ class DQNAgent(AbstractValueBasedAgent):
             
             # Target Q-value
             target_q = rewards + (self.gamma * next_q_combined * ~dones)
+            target_q = target_q.clamp(-50.0, 0.0) # para que no explote
         
         # MSE loss
         loss = nn.MSELoss()(current_q_combined, target_q)
