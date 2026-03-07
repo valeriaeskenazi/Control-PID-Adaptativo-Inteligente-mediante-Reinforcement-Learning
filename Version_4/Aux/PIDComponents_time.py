@@ -10,17 +10,17 @@ class ResponseTimeDetector:
         self.tolerance = tolerance
 
     def estimate(self, pvs_inicial: list, sps: list, 
-                pid_controllers: list, max_time: float = 1800):
+                pid_controllers: list, max_time: float = 1800, reset_pid=True):
         if self.env_type == 'simulation':
-            return self._estimate_multi(pvs_inicial, sps, pid_controllers, max_time)
+            return self._estimate_multi(pvs_inicial, sps, pid_controllers, max_time, reset_pid)
         elif self.env_type == 'real':
-            return self._estimate_online(pvs_inicial, sps, pid_controllers, max_time)
+            return self._estimate_online(pvs_inicial, sps, pid_controllers, max_time, reset_pid)
 
     def _estimate_multi(self, pvs_inicial: list, sps: list, 
-                    pid_controllers: list, max_time: float = 1800):
-        
-        for pid in pid_controllers:
-            pid.reset()
+                    pid_controllers: list, max_time: float = 1800, reset_pid=True):
+        if reset_pid:
+            for pid in pid_controllers:
+                pid.reset()
         
         n_vars = len(pvs_inicial)
         resultado = {
