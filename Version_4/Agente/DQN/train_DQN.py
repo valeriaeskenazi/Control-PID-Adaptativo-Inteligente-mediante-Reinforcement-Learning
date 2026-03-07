@@ -178,12 +178,19 @@ class DQNTrainer:
 
             # W&B
             if self.use_wandb:
+                if self.architecture == 'simple':
+                    epsilon_log = episode_metrics.get('ctrl_epsilon', 0)
+                    loss_log    = episode_metrics.get('ctrl_loss', 0)
+                else:
+                    epsilon_log = episode_metrics.get('orch_epsilon', 0)
+                    loss_log    = episode_metrics.get('orch_loss', 0)
+
                 log_dict = {
-                    'reward':    episode_reward,
-                    'energy':    episode_metrics.get('energy', 0),
+                    'reward'   : episode_reward,
+                    'energy'   : episode_metrics.get('energy', 0),
                     'overshoot': episode_metrics.get('max_overshoot', 0),
-                    'epsilon':   episode_metrics.get('ctrl_epsilon', 0),
-                    'loss':      episode_metrics.get('ctrl_loss', 0),
+                    'epsilon'  : epsilon_log,
+                    'loss'     : loss_log,
                 }
                 if self.architecture == 'simple' and self.kp_history:
                     for i in range(len(self.kp_history)):
@@ -308,7 +315,7 @@ class DQNTrainer:
             })
         # Normalizar por longitud del episodio
         episode_reward = episode_reward / episode_length if episode_length > 0 else 0
-        
+
         return episode_reward, episode_length, episode_metrics
     
     def _evaluate(self, n_eval_episodes: int = 5) -> float:
