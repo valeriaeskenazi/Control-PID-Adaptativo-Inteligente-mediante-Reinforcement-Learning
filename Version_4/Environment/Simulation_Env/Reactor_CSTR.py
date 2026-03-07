@@ -37,15 +37,15 @@ class CSTRSimulator:
         self.state = np.zeros(5)
         
         # Condiciones de estado estacionario
-        self.Ca_ss = 0.80
-        self.Cb_ss = 0.0
-        self.Cc_ss = 0.0
-        self.T_ss = 327.0
-        self.V_ss = 102.0
+        self.Ca_ss = 0.5634
+        self.Cb_ss = 0.4354
+        self.Cc_ss = 0.0       # aproximado
+        self.T_ss  = 340.0
+        self.V_ss  = 102.0
         
         # Valores iniciales de variables manipulables
-        self.Tc_initial = 327.0
-        self.F_initial = 100.0
+        self.Tc_initial = 340.0   
+        self.F_initial  = 100.0
         
         # Valores actuales de control (para simulate_step)
         self.Tc_current = self.Tc_initial
