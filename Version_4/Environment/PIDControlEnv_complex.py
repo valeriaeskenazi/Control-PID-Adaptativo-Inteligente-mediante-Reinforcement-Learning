@@ -298,7 +298,8 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             pvs_inicial=self.manipulable_pvs,
             sps=self.new_SP,
             pid_controllers=self.pid_controllers,
-            max_time=self.max_time_detector
+            max_time=self.max_time_detector,
+            reset_pid=False
         )
 
             
