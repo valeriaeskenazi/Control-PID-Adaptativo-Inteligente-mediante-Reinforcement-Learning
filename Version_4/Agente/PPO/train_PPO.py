@@ -261,7 +261,7 @@ class PPOTrainer:
                 action = {'ctrl': action_ctrl, 'orch': action_orch}
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
                 pv_history_episode.append(self.env.manipulable_pvs.copy())
-                sp_history_episode.append(self.env.manipulable_setpoints.copy())
+                sp_history_episode.append(self.env.current_SPs_manipulable.copy())
                 done = terminated or truncated
 
                 next_state_ctrl = next_obs['ctrl']
