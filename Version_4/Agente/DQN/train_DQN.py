@@ -47,7 +47,20 @@ class DQNTrainer:
             if ctrl_checkpoint:
                 print(f"Cargando agente CTRL pre-entrenado desde: {ctrl_checkpoint}")
                 self.agent_role = 'ctrl'
-                self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
+                ctrl_algo = config['agent_ctrl_config'].get('algorithm', 'dqn')
+                if ctrl_algo == 'ppo':
+                    from ..PPO.algorithm_PPO import PPOAgent
+                    self.agent_ctrl = PPOAgent(
+                        state_dim   = config['agent_ctrl_config']['state_dim'],
+                        action_dim  = config['agent_ctrl_config']['action_dim'],
+                        agent_role  = 'ctrl',
+                        n_vars      = config['agent_ctrl_config']['n_vars'],
+                        hidden_dims = config['agent_ctrl_config'].get('hidden_dims', (128, 64)),
+                        device      = config['agent_ctrl_config'].get('device', 'cpu')
+                    )
+                else:
+                    self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
+
                 self.agent_ctrl.load(ctrl_checkpoint)
                 self.agent_ctrl.epsilon = 0.0
                 self.env.agente_ctrl = self.agent_ctrl
