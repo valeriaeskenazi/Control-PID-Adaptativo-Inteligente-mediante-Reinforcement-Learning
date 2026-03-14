@@ -58,8 +58,11 @@ class ResponseTimeDetector:
                 resultado['trayectorias_control'][i].append(u)
             
             # UN SOLO paso del CSTR con ambos outputs
-            pvs = self.proceso.simulate_step_multi(control_outputs, self.dt)
-            
+            # Completar control_outputs si el simulador espera más variables que las controladas
+            full_outputs = list(self.proceso.external_process.state[3:3+2]) if hasattr(self.proceso, 'external_process') else list(control_outputs)
+            full_outputs[:len(control_outputs)] = control_outputs
+            pvs = self.proceso.simulate_step_multi(full_outputs, self.dt)
+
             for i in range(n_vars):
                 resultado['trayectorias_pv'][i].append(pvs[i])
             
