@@ -181,7 +181,7 @@ class PIDControlEnv_Simple(gym.Env, ABC):
         #SIMULADOR Y VARIABES DEL ENTORNO A RESETEAR
         if hasattr(self.proceso, 'reset'):
             pvs_iniciales = self.proceso.reset()
-            self.manipulable_pvs = list(pvs_iniciales) if pvs_iniciales else [
+            self.manipulable_pvs = list(pvs_iniciales)[:self.n_manipulable_vars] if pvs_iniciales else [
                 random.uniform(rango[0], rango[1]) for rango in self.manipulable_ranges
             ]
         else:
