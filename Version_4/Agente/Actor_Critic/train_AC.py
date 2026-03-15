@@ -286,10 +286,9 @@ class ACTrainer:
                     'sp_history': episode_metrics['sp_history']
                 })
 
+        mean_reward = np.mean(eval_rewards)
         if self.use_wandb:
             wandb.log({'eval_reward': mean_reward})
-
-        mean_reward = np.mean(eval_rewards)
         print(f"Evaluación: Reward promedio = {mean_reward:.2f}")
 
         if mean_reward > self.best_eval_reward + self.early_stopping_min_delta:
