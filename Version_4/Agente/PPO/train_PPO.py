@@ -97,6 +97,10 @@ class PPOTrainer:
             # ORCH PPO
             self.agent_role = 'orch'
             self.agent_orch = self._create_agent(config['agent_orch_config'], 'orch')
+            orch_checkpoint = config.get('orch_checkpoint_path', None)
+            if orch_checkpoint:
+                print(f"Cargando agente ORCH desde checkpoint: {orch_checkpoint}")
+                self.agent_orch.load(orch_checkpoint)
 
         # ENTRENAMIENTO
         self.n_episodes = config.get('n_episodes', 1000)
@@ -159,7 +163,8 @@ class PPOTrainer:
         return agent
 
     def train(self):
-        for episode in range(self.n_episodes):
+        episode_start = self.config.get('episode_start', 0)
+        for episode in range(episode_start, episode_start + self.n_episodes):
             episode_reward, episode_length, episode_metrics = self._run_episode(episode, training=True)
 
             self.episode_rewards.append(episode_reward)
