@@ -316,3 +316,14 @@ class ACTrainer:
         if self.agent_orch is not None:
             self.agent_orch.save(str(self.checkpoint_dir / f'agent_orch_{suffix}.pt'))
         print(f"Checkpoint guardado: {suffix}")
+
+        if self.use_wandb and wandb.run is not None:
+            artifact = wandb.Artifact(
+                name        = f'model_{wandb.run.name}',
+                type        = 'model',
+                description = f'Checkpoint ep{episode} {"(best)" if best else ""}',
+                metadata    = {'episode': episode, 'best': best}
+            )
+            artifact.add_dir(str(self.checkpoint_dir))
+            wandb.log_artifact(artifact)
+
