@@ -151,10 +151,10 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.max_steps = config.get('max_steps', 20)
         self.current_step = 0
 
-        ## Frecuencia del ORCH: actúa cada orch_freq steps del CTRL
-        self.orch_freq = config.get('orch_freq', 1)  
-        self._accumulated_reward = 0.0              
-        self._orch_step_count = 0                   
+        # Frecuencia del ORCH: actúa cada orch_freq steps del CTRL
+        self.orch_freq = config.get('orch_freq', 1)
+        self._accumulated_reward = 0.0
+        self._orch_step_count = 0
 
         ## Recompensa
         self.reward_calculator = RewardCalculator(
@@ -171,7 +171,7 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             max_e = max(max_e, 1e-8)
             obs_orch.extend([
                 np.clip(self.target_pvs[j] / max_e, 0.0, 1.0),
-                self.target_setpoints[j],  # ya está en [0,1]
+                self.target_setpoints[j],
                 np.clip(self.error_target[j] / max_e, -1.0, 1.0),
                 np.clip(self.error_integral_target[j] / max_e, -1.0, 1.0),
                 np.clip(self.error_derivative_target[j] / max_e, -1.0, 1.0)
@@ -273,11 +273,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             action_orch = action
 
         # 2. DECIDIR SI EL ORCH ACTÚA ESTE STEP
-        # Ejemplo: Con orch_freq=30: el ORCH actúa en steps 0, 30, 60...
         orch_acts_this_step = (self._orch_step_count % self.orch_freq == 0)
 
         if orch_acts_this_step and action_orch is not None:
-            # 2a. TRADUCIR ACCIÓN ORCH A NUEVOS SETPOINTS
             self.action_type_orch = self.agente_orch.get('agent_type', 'continuous')
             self.new_SP = self.apply_action_orch.translate(
                 action=action_orch,
@@ -286,6 +284,8 @@ class PIDControlEnv_Complex(gym.Env, ABC):
                 current_values=self.current_SPs_manipulable
             )
             self.current_SPs_manipulable = self.new_SP.copy()
+            # Resetear integral al cambiar SP — evita arrastre del error anterior
+            self.error_integral_target = [0.0] * self.n_target_vars
         
         # 3. CTRL DECIDE PARÁMETROS PID PARA ALCANZAR ESOS SP
         obs_ctrl = self._get_observation()['ctrl']
@@ -361,10 +361,10 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         # Acumular reward entre decisiones del ORCH
         self._accumulated_reward += reward_step
 
-        # El ORCH recibe reward solo cuando vuelve a actuar (o al final del episodio)
-        next_orch_acts = ((self._orch_step_count + 1) % self.orch_freq == 0)
-        if next_orch_acts or terminated or truncated:
-            reward = self._accumulated_reward / self.orch_freq  # dividir por orch_freq!!!
+        # Entregar reward acumulado cuando el ORCH actúa (o al final del episodio)
+        # Dividir por orch_freq para mantener la escala consistente
+        if orch_acts_this_step or terminated or truncated:
+            reward = self._accumulated_reward / self.orch_freq
             self._accumulated_reward = 0.0
         else:
             reward = 0.0
@@ -372,9 +372,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         # 10. OBTENER OBSERVACIÓN E INFO
         observation = self._get_observation()
         info = self._get_info()
-        info['orch_acted'] = orch_acts_this_step   
-        info['reward_step'] = reward_step           
-        
+        info['orch_acted'] = orch_acts_this_step
+        info['reward_step'] = reward_step
+
         # 11. INCREMENTAR CONTADORES
         self.current_step += 1
         self._orch_step_count += 1
@@ -390,7 +390,7 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             error = self.target_setpoints[i] - self.target_pvs[i]
             self.error_target[i] = error
             self.error_integral_target[i] += error * self.dt
-            # Clip para evitar windup — mantiene el integral en el rango físico de la variable
+            # Clip para evitar windup — mantiene el integral en el rango físico
             max_e = self.target_working_ranges[i][1] - self.target_working_ranges[i][0]
             self.error_integral_target[i] = np.clip(
                 self.error_integral_target[i], -max_e, max_e
