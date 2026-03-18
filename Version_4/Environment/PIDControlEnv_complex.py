@@ -151,6 +151,11 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.max_steps = config.get('max_steps', 20)
         self.current_step = 0
 
+        ## Frecuencia del ORCH: actúa cada orch_freq steps del CTRL
+        self.orch_freq = config.get('orch_freq', 1)  
+        self._accumulated_reward = 0.0              
+        self._orch_step_count = 0                   
+
         ## Recompensa
         self.reward_calculator = RewardCalculator(
             weights=config.get('reward_weights', None),
@@ -245,6 +250,8 @@ class PIDControlEnv_Complex(gym.Env, ABC):
 
         # VARIABLES DE ENTRENAMIENTO
         self.current_step = 0
+        self._accumulated_reward = 0.0
+        self._orch_step_count = 0
 
         # DINAMICA
         for pid in self.pid_controllers:
@@ -259,19 +266,24 @@ class PIDControlEnv_Complex(gym.Env, ABC):
     def step(self, action):        
         # 1. EXTRAER ACCIÓN DE ORCH
         if isinstance(action, dict):
-            action_orch = action['orch']
+            action_orch = action.get('orch', None)
         else:
             action_orch = action
-        
-        # 2. TRADUCIR ACCIÓN ORCH A NUEVOS SETPOINTS
-        self.action_type_orch = self.agente_orch.get('agent_type', 'continuous')
-        self.new_SP = self.apply_action_orch.translate(
-            action=action_orch,
-            agent_type='orch',
-            action_type=self.action_type_orch,
-            current_values=self.current_SPs_manipulable
-        )
-        self.current_SPs_manipulable = self.new_SP.copy() # Actualizar SPs actuales para la próxima acción de ORCH
+
+        # 2. DECIDIR SI EL ORCH ACTÚA ESTE STEP
+        # Ejemplo: Con orch_freq=30: el ORCH actúa en steps 0, 30, 60...
+        orch_acts_this_step = (self._orch_step_count % self.orch_freq == 0)
+
+        if orch_acts_this_step and action_orch is not None:
+            # 2a. TRADUCIR ACCIÓN ORCH A NUEVOS SETPOINTS
+            self.action_type_orch = self.agente_orch.get('agent_type', 'continuous')
+            self.new_SP = self.apply_action_orch.translate(
+                action=action_orch,
+                agent_type='orch',
+                action_type=self.action_type_orch,
+                current_values=self.current_SPs_manipulable
+            )
+            self.current_SPs_manipulable = self.new_SP.copy()
         
         # 3. CTRL DECIDE PARÁMETROS PID PARA ALCANZAR ESOS SP
         obs_ctrl = self._get_observation()['ctrl']
@@ -333,9 +345,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         terminated = self._check_terminated()
         truncated = self._check_truncated()
         
-        reward = self.reward_calculator.calculate(
+        reward_step = self.reward_calculator.calculate(
             errors=errors,
-            tiempos_respuesta=[0.0] * self.n_target_vars,  # No aplicable aquí
+            tiempos_respuesta=[0.0] * self.n_target_vars,
             overshoots=[0.0] * self.n_target_vars,
             energy_step=energy_step,
             pvs=self.target_pvs,
@@ -343,13 +355,29 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             terminated=terminated,
             truncated=truncated
         )
+
+        # Acumular reward entre decisiones del ORCH
+        self._accumulated_reward += reward_step
+
+        # El ORCH recibe reward solo cuando vuelve a actuar (o al final del episodio)
+        next_orch_acts = ((self._orch_step_count + 1) % self.orch_freq == 0)
+        if next_orch_acts or terminated or truncated:
+            reward = self._accumulated_reward
+            self._accumulated_reward = 0.0
+        else:
+            # Pasos intermedios: devolver 0 al trainer
+            # (el trainer solo debe hacer update del ORCH cuando recibe reward real)
+            reward = 0.0
         
         # 10. OBTENER OBSERVACIÓN E INFO
         observation = self._get_observation()
         info = self._get_info()
+        info['orch_acted'] = orch_acts_this_step   
+        info['reward_step'] = reward_step           
         
-        # 11. INCREMENTAR STEP
+        # 11. INCREMENTAR CONTADORES
         self.current_step += 1
+        self._orch_step_count += 1
 
         return observation, reward, terminated, truncated, info
 
@@ -382,5 +410,3 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             for pv, rango in zip(self.target_pvs, self.target_ranges)
         )
         return failure
-
-    
