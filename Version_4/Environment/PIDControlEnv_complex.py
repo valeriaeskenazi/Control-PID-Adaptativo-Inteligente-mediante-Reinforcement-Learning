@@ -362,11 +362,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         # El ORCH recibe reward solo cuando vuelve a actuar (o al final del episodio)
         next_orch_acts = ((self._orch_step_count + 1) % self.orch_freq == 0)
         if next_orch_acts or terminated or truncated:
-            reward = self._accumulated_reward
+            reward = self._accumulated_reward / self.orch_freq  # dividir por orch_freq!!!
             self._accumulated_reward = 0.0
         else:
-            # Pasos intermedios: devolver 0 al trainer
-            # (el trainer solo debe hacer update del ORCH cuando recibe reward real)
             reward = 0.0
         
         # 10. OBTENER OBSERVACIÓN E INFO
