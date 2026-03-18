@@ -276,7 +276,9 @@ class ACTrainer:
                 episode_metrics[f'kd_var{i}'] = params[2]
 
         # Normalizar por longitud del episodio
-        episode_reward = episode_reward / episode_length if episode_length > 0 else 0
+        if self.architecture == 'simple':
+            episode_reward = episode_reward / episode_length if episode_length > 0 else 0
+        # Para jerarquica no normalizar — el reward ya viene escalado del ambiente
 
         return episode_reward, episode_length, episode_metrics
 
