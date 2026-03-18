@@ -167,12 +167,14 @@ class PIDControlEnv_Complex(gym.Env, ABC):
     def _get_observation(self):            
         obs_orch = []
         for j in range(self.n_target_vars):
+            max_e = self.target_working_ranges[j][1] - self.target_working_ranges[j][0]
+            max_e = max(max_e, 1e-8)
             obs_orch.extend([
-                self.target_pvs[j],
-                self.target_setpoints[j],
-                self.error_target[j],
-                self.error_integral_target[j],
-                self.error_derivative_target[j]
+                np.clip(self.target_pvs[j] / max_e, 0.0, 1.0),
+                self.target_setpoints[j],  # ya está en [0,1]
+                np.clip(self.error_target[j] / max_e, -1.0, 1.0),
+                np.clip(self.error_integral_target[j] / max_e, -1.0, 1.0),
+                np.clip(self.error_derivative_target[j] / max_e, -1.0, 1.0)
             ])
         
         obs_ctrl = []
@@ -388,6 +390,11 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             error = self.target_setpoints[i] - self.target_pvs[i]
             self.error_target[i] = error
             self.error_integral_target[i] += error * self.dt
+            # Clip para evitar windup — mantiene el integral en el rango físico de la variable
+            max_e = self.target_working_ranges[i][1] - self.target_working_ranges[i][0]
+            self.error_integral_target[i] = np.clip(
+                self.error_integral_target[i], -max_e, max_e
+            )
             self.error_derivative_target[i] = (error - self.error_prevs_target[i]) / self.dt if self.dt > 0 else 0.0
             self.error_prevs_target[i] = error
 
