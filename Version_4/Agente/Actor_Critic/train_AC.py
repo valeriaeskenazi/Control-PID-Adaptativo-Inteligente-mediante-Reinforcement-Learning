@@ -225,6 +225,7 @@ class ACTrainer:
                 state = next_state
 
             else:
+                # El ORCH siempre selecciona una acción (el ambiente decide si la usa)
                 action_orch = self.agent_orch.select_action(state_orch, training=training)
                 action_ctrl = self.agent_ctrl.select_action(state_ctrl, training=False)
 
@@ -235,17 +236,23 @@ class ACTrainer:
                 next_state_ctrl = next_obs['ctrl']
                 next_state_orch = next_obs['orch']
 
-                if training:
-                    exp_orch = Experience(state_orch, action_orch, reward, next_state_orch, done)
-                    self.agent_orch.memory.add(exp_orch)
-                    metrics = self.agent_orch.update()
-                    if metrics:
-                        actor_losses.append(metrics.get('actor_loss', 0))
-                        critic_losses.append(metrics.get('critic_loss', 0))
-                        advantage_means.append(metrics.get('advantage_mean', 0))
+                orch_acted = info.get('orch_acted', True)  # True si el ORCH actuó este step
 
+                if training:
+                    # Solo guardar experiencia del ORCH cuando actuó Y hay reward real
+                    if orch_acted and reward != 0.0:
+                        exp_orch = Experience(state_orch, action_orch, reward, next_state_orch, done)
+                        self.agent_orch.memory.add(exp_orch)
+                        metrics = self.agent_orch.update()
+                        if metrics:
+                            actor_losses.append(metrics.get('actor_loss', 0))
+                            critic_losses.append(metrics.get('critic_loss', 0))
+                            advantage_means.append(metrics.get('advantage_mean', 0))
+
+                # state_orch solo se actualiza cuando el ORCH actuó (es su "tiempo". Entre medias mantiene su estado anterior hasta su próxima decisión
+                if orch_acted:
+                    state_orch = next_state_orch
                 state_ctrl = next_state_ctrl
-                state_orch = next_state_orch
 
             episode_reward += reward
             episode_length += 1
@@ -326,4 +333,3 @@ class ACTrainer:
             )
             artifact.add_dir(str(self.checkpoint_dir))
             wandb.log_artifact(artifact)
-
