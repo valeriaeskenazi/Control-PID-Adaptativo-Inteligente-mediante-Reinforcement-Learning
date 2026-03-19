@@ -78,8 +78,9 @@ class PIDControlEnv_Complex(gym.Env, ABC):
 
         ### Dinamica del ambiente (PIDs para variables manipulables)
         self.pid_controllers = [
-            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim)  
-            for _ in range(self.n_manipulable_vars)
+            PIDController(kp=1.0, ki=0.1, kd=0.01, dt=self.dt_sim,
+                        output_limits=(rango[0], rango[1]))
+            for rango in self.manipulable_ranges
         ]
 
         #### Valor dummy iniciales (se calculan en el primer step)

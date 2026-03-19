@@ -58,6 +58,10 @@ class ACTrainer:
                 self.agent_ctrl = self._create_agent(config['agent_ctrl_config'], 'ctrl')
 
             self.agent_ctrl.load(ctrl_checkpoint)
+            orch_checkpoint = config.get('orch_checkpoint_path', None)
+            if orch_checkpoint:
+                print(f"Cargando agente ORCH desde: {orch_checkpoint}")
+                self.agent_orch.load(orch_checkpoint)
             self.env.agente_ctrl = self.agent_ctrl
             self.env.action_type_ctrl = config['agent_ctrl_config'].get('action_type', 'discrete')
 
