@@ -252,8 +252,8 @@ class ACTrainer:
                             critic_losses.append(metrics.get('critic_loss', 0))
                             advantage_means.append(metrics.get('advantage_mean', 0))
 
-                if orch_acted:
-                    state_orch = next_state_orch
+                
+                state_orch = next_state_orch
                 state_ctrl = next_state_ctrl
 
             episode_reward += reward
