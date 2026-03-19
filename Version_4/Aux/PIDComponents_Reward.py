@@ -131,7 +131,7 @@ class RewardCalculator:
         )
 
         if terminated and success:
-            return step_reward * 0.5   # Éxito: reduce penalización a la mitad
+            return step_reward * 0.5 + 1.0  # Éxito: reduce penalización + bonus positivo claro
         elif terminated and not success:
             return step_reward * 2.0   # Fallo: duplica penalización
         else:  # truncated
@@ -140,9 +140,13 @@ class RewardCalculator:
     def _stability_multiplier(self, ratio: float) -> float:
         """
         Convierte el ratio de estabilidad en un multiplicador para el reward.
-        Interpolación lineal entre [1.5, 0.5].
+        Interpolación lineal entre [0.5, 1.5].
+        Sistema estable (ratio=1) → multiplica x1.5 (menos penalización).
+        Sistema inestable (ratio=0) → multiplica x0.5 (más penalización).
+        Nota: cuando stability=None (no se pasan trayectorias), ratio=0.0
+        y el multiplicador es 0.5 — señal neutra conservadora.
         """
-        return 1.5 - ratio  # ratio=0 → 1.5, ratio=0.5 → 1.0, ratio=1.0 → 0.5    
+        return 0.5 + ratio  # ratio=0 → 0.5, ratio=0.5 → 1.0, ratio=1.0 → 1.5
     
     def update_weights(self, new_weights: dict):
         """Actualizar pesos de los componentes."""
