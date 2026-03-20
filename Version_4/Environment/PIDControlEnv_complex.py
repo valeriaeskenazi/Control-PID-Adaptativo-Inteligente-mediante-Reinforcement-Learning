@@ -92,7 +92,8 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         self.obs_size = len(self.obs_structure) 
 
         n_obs_ctrl = self.obs_size * self.n_manipulable_vars
-        n_obs_orch = self.obs_size * self.n_target_vars
+        # 5 por cada variable objetivo + 1 SP normalizado por cada variable manipulable
+        n_obs_orch = self.obs_size * self.n_target_vars + self.n_manipulable_vars
 
         self.observation_space = spaces.Dict({
             'orch': spaces.Box(
@@ -177,6 +178,13 @@ class PIDControlEnv_Complex(gym.Env, ABC):
                 np.clip(self.error_integral_target[j] / max_e, -1.0, 1.0),
                 np.clip(self.error_derivative_target[j] / max_e, -1.0, 1.0)
             ])
+        # SP actuales de las variables manipulables (normalizados a [0,1])
+        # Le da al orch contexto de qué está pidiendo actualmente
+        current_sps = self.current_SPs_manipulable if hasattr(self, 'current_SPs_manipulable') else self.manipulable_pvs
+        for i in range(self.n_manipulable_vars):
+            r = self.manipulable_ranges[i]
+            sp_norm = np.clip((current_sps[i] - r[0]) / (r[1] - r[0] + 1e-8), 0.0, 1.0)
+            obs_orch.append(float(sp_norm))
         
         obs_ctrl = []
         for i in range(self.n_manipulable_vars):
