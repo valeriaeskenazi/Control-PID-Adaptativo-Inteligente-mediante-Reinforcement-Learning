@@ -203,6 +203,10 @@ class ACTrainer:
         episode_energy = 0
         episode_max_overshoot = 0
 
+        # Para arquitectura jerárquica: experiencia pendiente del orch
+        pending_orch_exp = None
+        accumulated_orch_reward = 0.0
+
         while not done and episode_length < self.max_steps_per_episode:
             orch_acted = False
 
@@ -243,16 +247,42 @@ class ACTrainer:
                 orch_acted = info.get('orch_acted', False)
 
                 if training:
-                    if orch_acted:
-                        exp_orch = Experience(state_orch, action_orch, reward, next_state_orch, done)
-                        self.agent_orch.memory.add(exp_orch)
-                        metrics = self.agent_orch.update()
-                        if metrics:
-                            actor_losses.append(metrics.get('actor_loss', 0))
-                            critic_losses.append(metrics.get('critic_loss', 0))
-                            advantage_means.append(metrics.get('advantage_mean', 0))
+                    # Acumular reward entre decisiones del orch
+                    accumulated_orch_reward += reward
 
-                
+                    if orch_acted:
+                        # Cerrar experiencia anterior con next_state real
+                        # (estado DESPUÉS de que ctrl ejecutó y Cb cambió)
+                        if pending_orch_exp is not None:
+                            exp_orch = Experience(
+                                pending_orch_exp['state'],
+                                pending_orch_exp['action'],
+                                accumulated_orch_reward,
+                                state_orch,  # next_state real — Cb ya actualizado
+                                done
+                            )
+                            self.agent_orch.memory.add(exp_orch)
+                            metrics = self.agent_orch.update()
+                            if metrics:
+                                actor_losses.append(metrics.get('actor_loss', 0))
+                                critic_losses.append(metrics.get('critic_loss', 0))
+                                advantage_means.append(metrics.get('advantage_mean', 0))
+                            accumulated_orch_reward = 0.0
+
+                        # Abrir nueva experiencia pendiente
+                        pending_orch_exp = {'state': state_orch, 'action': action_orch}
+
+                    # Cerrar última experiencia al terminar el episodio
+                    if done and pending_orch_exp is not None:
+                        exp_orch = Experience(
+                            pending_orch_exp['state'],
+                            pending_orch_exp['action'],
+                            accumulated_orch_reward,
+                            next_state_orch,
+                            done
+                        )
+                        self.agent_orch.memory.add(exp_orch)
+
                 state_orch = next_state_orch
                 state_ctrl = next_state_ctrl
 
