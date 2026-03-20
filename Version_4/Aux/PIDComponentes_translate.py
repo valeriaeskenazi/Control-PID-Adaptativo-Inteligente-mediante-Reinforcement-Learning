@@ -109,7 +109,12 @@ class ApplyAction:
             new_sps = []
             
             for i in range(n_vars):
-                delta_sp = action[i] 
+                # action[i] está en [-1, 1] por el tanh del actor
+                # Se escala por el rango de la variable y delta_percent_orch
+                # para que el delta tenga sentido físico
+                # Ejemplo: action=1.0, rango T=120K, delta_percent=0.05 → delta=+6K
+                range_size = self.manipulable_ranges[i][1] - self.manipulable_ranges[i][0]
+                delta_sp = action[i] * range_size * self.delta_percent_orch
                 sp_new = current_values[i] + delta_sp
                 
                 # Clipear con manipulable_ranges
@@ -145,5 +150,3 @@ class ApplyAction:
                 new_sps.append(sp)
             
             return new_sps
-        
-      
