@@ -380,7 +380,10 @@ class PIDControlEnv_Complex(gym.Env, ABC):
         # Entregar reward acumulado cuando el ORCH actúa (o al final del episodio)
         # Dividir por orch_freq para mantener la escala consistente
         if orch_acts_this_step or terminated or truncated:
-            reward = self._accumulated_reward / self.orch_freq
+            if terminated:
+                reward = self._accumulated_reward  # fallo: reward completo sin dividir
+            else:
+                reward = self._accumulated_reward / self.orch_freq
             self._accumulated_reward = 0.0
         else:
             reward = 0.0
