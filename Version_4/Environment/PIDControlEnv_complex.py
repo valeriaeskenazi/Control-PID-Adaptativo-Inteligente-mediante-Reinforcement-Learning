@@ -233,10 +233,17 @@ class PIDControlEnv_Complex(gym.Env, ABC):
             for rango in self.manipulable_ranges
         ]    
 
-        self.target_pvs = [
-            random.uniform(rango[0], rango[1])
-            for rango in self.target_working_ranges
-        ]
+        # Inicializar target_pvs con el valor real del proceso si está disponible
+        # Evita que el primer estado del orch tenga un Cb ficticio (random)
+        if hasattr(self.proceso, 'external_process') and self.proceso.external_process:
+            state = self.proceso.external_process.get_state()
+            self.target_pvs = [state[0]]  # Cb real del CSTR
+        else:
+            self.target_pvs = [
+                random.uniform(rango[0], rango[1])
+                for rango in self.target_working_ranges
+            ]
+
         self.target_setpoints = [
             random.uniform(rango[0], rango[1])
             for rango in self.target_ranges
