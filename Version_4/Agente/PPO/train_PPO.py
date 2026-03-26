@@ -245,6 +245,9 @@ class PPOTrainer:
                 next_state, reward, terminated, truncated, info = self.env.step(action)
                 done = terminated or truncated
 
+                pv_history_episode.append(self.env.manipulable_pvs.copy())
+                sp_history_episode.append(self.env.manipulable_setpoints.copy())
+
                 if training:
                     # PPO: guardar transición en buffer (incluye log_prob y value del select_action)
                     self.agent_ctrl.store_transition(state, action, reward, next_state, done)
