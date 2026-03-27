@@ -245,12 +245,11 @@ class PPOTrainer:
                 next_state, reward, terminated, truncated, info = self.env.step(action)
                 done = terminated or truncated
 
-                pv_history_episode.append(self.env.manipulable_pvs.copy())
-                sp_history_episode.append(self.env.manipulable_setpoints.copy())
-
                 if training:
                     # PPO: guardar transición en buffer (incluye log_prob y value del select_action)
-                    self.agent_ctrl.store_transition(state, action, reward, next_state, done)
+                    # Se pasa terminated separado de done para que GAE no zerée
+                    # next_values en episodios truncados por max_steps
+                    self.agent_ctrl.store_transition(state, action, reward, next_state, done, terminated=terminated)
                     # Intentar update (solo actualiza cuando buffer llega a rollout_steps)
                     metrics = self.agent_ctrl.update()
                     if metrics:
@@ -276,7 +275,7 @@ class PPOTrainer:
                 next_state_orch = next_obs['orch']
 
                 if training:
-                    self.agent_orch.store_transition(state_orch, action_orch, reward, next_state_orch, done)
+                    self.agent_orch.store_transition(state_orch, action_orch, reward, next_state_orch, done, terminated=terminated)
                     metrics = self.agent_orch.update()
                     if metrics:
                         episode_metrics_list.append(metrics)
@@ -289,10 +288,10 @@ class PPOTrainer:
 
         # Agregar métricas PID finales del episodio
         episode_metrics = {
-            'actor_loss':    np.mean([m.get('actor_loss', 0) for m in episode_metrics_list]) if episode_metrics_list else 0,
-            'critic_loss':   np.mean([m.get('critic_loss', 0) for m in episode_metrics_list]) if episode_metrics_list else 0,
-            'entropy':       np.mean([m.get('entropy', 0) for m in episode_metrics_list]) if episode_metrics_list else 0,
-            'clip_fraction': np.mean([m.get('clip_fraction', 0) for m in episode_metrics_list]) if episode_metrics_list else 0,
+            'actor_loss':    np.mean([m.get('actor_loss', 0) for m in episode_metrics_list]) if episode_metrics_list else float('nan'),
+            'critic_loss':   np.mean([m.get('critic_loss', 0) for m in episode_metrics_list]) if episode_metrics_list else float('nan'),
+            'entropy':       np.mean([m.get('entropy', 0) for m in episode_metrics_list]) if episode_metrics_list else float('nan'),
+            'clip_fraction': np.mean([m.get('clip_fraction', 0) for m in episode_metrics_list]) if episode_metrics_list else float('nan'),
             'energy':        episode_energy,
             'max_overshoot': episode_max_overshoot,
             'pv_history': pv_history_episode,  

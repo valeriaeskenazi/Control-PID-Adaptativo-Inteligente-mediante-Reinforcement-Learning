@@ -25,7 +25,8 @@ class RolloutBuffer:
         next_state: np.ndarray,
         done: bool,
         log_prob: float,
-        value: float
+        value: float,
+        terminated: bool = None   # True solo si es estado terminal real (no truncado por max_steps)
     ):
         self.states.append(state)
         self.actions.append(action)
@@ -34,6 +35,8 @@ class RolloutBuffer:
         self.dones.append(done)
         self.log_probs.append(log_prob)
         self.values.append(value)
+        # Si no se pasa terminated, se asume igual a done (comportamiento anterior)
+        self.terminated.append(terminated if terminated is not None else done)
 
     def get(self) -> Dict[str, torch.Tensor]:
         """Convierte el buffer a tensores para el update."""
@@ -43,6 +46,7 @@ class RolloutBuffer:
             'rewards':     torch.FloatTensor(np.array(self.rewards)).to(self.device),
             'next_states': torch.FloatTensor(np.array(self.next_states)).to(self.device),
             'dones':       torch.BoolTensor(np.array(self.dones)).to(self.device),
+            'terminated':  torch.BoolTensor(np.array(self.terminated)).to(self.device),
             'log_probs':   torch.FloatTensor(np.array(self.log_probs)).to(self.device),
             'values':      torch.FloatTensor(np.array(self.values)).to(self.device),
         }
@@ -53,6 +57,7 @@ class RolloutBuffer:
         self.rewards = []
         self.next_states = []
         self.dones = []
+        self.terminated = []
         self.log_probs = []
         self.values = []
 
@@ -147,7 +152,8 @@ class PPOAgent(AbstractActorCriticAgent):
         action: np.ndarray,
         reward: float,
         next_state: np.ndarray,
-        done: bool
+        done: bool,
+        terminated: bool = None
     ):
 
         self.buffer.add(
@@ -157,7 +163,8 @@ class PPOAgent(AbstractActorCriticAgent):
             next_state=next_state,
             done=done,
             log_prob=self._last_log_prob,
-            value=self._last_value
+            value=self._last_value,
+            terminated=terminated
         )
 
     def update(self, batch_data: Dict[str, Any] = None) -> Dict[str, float]:
@@ -247,18 +254,23 @@ class PPOAgent(AbstractActorCriticAgent):
             λ=0 → TD(0), bajo varianza, alto bias
             λ=1 → Monte Carlo, alto varianza, bajo bias
             λ=0.95 → balance empírico (Schulman et al.)
-        
-        δt = rt + γV(st+1) - V(st)
-        At = δt + γλ * δt+1 + (γλ)² * δt+2 + ...
+
+        Nota: se usa `terminated` (estado terminal real) y NO `dones` para zerear
+        next_values. Los episodios truncados por max_steps tienen next_value != 0.
         """
-        rewards    = batch['rewards']
-        dones      = batch['dones']
-        values     = batch['values']
+        rewards     = batch['rewards']
+        dones       = batch['dones']
+        terminated  = batch['terminated']
+        values      = batch['values']
         next_states = batch['next_states']
+
+        # Normalizar rewards para estabilizar el critic (estándar en PPO)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
 
         with torch.no_grad():
             next_values = self.critic(next_states).squeeze(1)
-            next_values[dones] = 0.0
+            # Solo zerear next_value en estados terminales reales, NO en truncados
+            next_values[terminated] = 0.0
 
         advantages = torch.zeros_like(rewards)
         gae = 0.0
@@ -266,6 +278,7 @@ class PPOAgent(AbstractActorCriticAgent):
         # Recorrer en reversa para calcular GAE
         for t in reversed(range(len(rewards))):
             delta = rewards[t] + self.gamma * next_values[t] - values[t]
+            # Resetear GAE en límites de episodio (done incluye truncated y terminated)
             gae = delta + self.gamma * self.gae_lambda * (0.0 if dones[t] else gae)
             advantages[t] = gae
 
