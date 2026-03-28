@@ -258,7 +258,7 @@ def setup_transfer_learning(
     # 4. Resetear contadores de entrenamiento (nuevo problema)
     agent.training_step = 0
     agent.episode_count = 0
-    print(f"🔢 Contadores reseteados")
+    print(f"Contadores reseteados")
     
     print("=" * 60)
     print("Agente listo para fine-tuning")

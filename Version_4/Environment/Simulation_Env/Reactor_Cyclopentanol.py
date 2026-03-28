@@ -87,7 +87,7 @@ class CyclopentanolReactor:
         self.QK_current = self.QK_ss
         
         print("=" * 60)
-        print("⚗️  Simulador de Reactor Ciclopentanol creado")
+        print("  Simulador de Reactor Ciclopentanol creado")
         print(f"   Temperatura alimentación: {self.T0} K")
         print(f"   Concentración alimentación: {self.CA0} mol/L")
         print(f"   Límites v: [{self.v_min}, {self.v_max}] L/h")
@@ -260,10 +260,10 @@ class CyclopentanolReactor:
         """
         if CA0 is not None:
             self.CA0 = np.clip(CA0, 4.5, 5.7)
-            print(f"🔀 Perturbación: CA0 = {self.CA0} mol/L")
+            print(f"Perturbación: CA0 = {self.CA0} mol/L")
         if T0 is not None:
             self.T0 = T0
-            print(f"🔀 Perturbación: T0 = {T0} K")
+            print(f"Perturbación: T0 = {T0} K")
     
     def _compute_steady_state(self, v: float, QK: float, x0: list) -> tuple:
         """Calcula el estado estacionario numéricamente."""
@@ -296,5 +296,5 @@ class CyclopentanolReactor:
         print(f"v/V = {self.v_ss / self.VR:.2f} h⁻¹ (esperado: 18.83)")
         
         is_valid = all(abs(d) < tol for d in derivs)
-        print(f"\n{'✅' if is_valid else '❌'} Estado estacionario {'válido' if is_valid else 'NO válido'}")
+        print(f"\n{'Correcto' if is_valid else 'Incorrecto'} Estado estacionario {'válido' if is_valid else 'NO válido'}")
         return is_valid
