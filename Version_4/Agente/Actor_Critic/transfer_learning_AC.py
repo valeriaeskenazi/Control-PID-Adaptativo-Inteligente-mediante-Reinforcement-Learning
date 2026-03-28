@@ -77,7 +77,7 @@ def load_pretrained_ac(
                 f"Dimensión de estado incompatible: pre-entrenado={pretrained_state_dim}, "
                 f"nuevo={state_dim}. Transfer learning directo no es posible."
             )
-        print(f"✅ Dimensiones compatibles: state_dim={state_dim}, hidden[0]={pretrained_hidden}")
+        print(f"Dimensiones compatibles: state_dim={state_dim}, hidden[0]={pretrained_hidden}")
     
     # Cargar pesos
     agent.actor.load_state_dict(checkpoint['actor_state_dict'])
@@ -87,7 +87,7 @@ def load_pretrained_ac(
     agent.training_step = checkpoint.get('training_step', 0)
     agent.episode_count = checkpoint.get('episode_count', 0)
     
-    print(f"✅ Pesos pre-entrenados cargados desde: {checkpoint_path}")
+    print(f"   Pesos pre-entrenados cargados desde: {checkpoint_path}")
     print(f"   Training steps previos: {agent.training_step}")
     print(f"   Episodios previos: {agent.episode_count}")
     
@@ -124,7 +124,7 @@ def freeze_layers(
     frozen_params = []
     
     if freeze_strategy == 'none':
-        print("🔓 Sin capas congeladas — fine-tuning completo")
+        print(" Sin capas congeladas — fine-tuning completo")
         return frozen_params
     
     elif freeze_strategy == 'early':
@@ -147,7 +147,7 @@ def freeze_layers(
                 param.requires_grad = False
                 frozen_params.append(f'critic.network.{name}')
         
-        print(f"🧊 Congeladas {n_freeze} capas tempranas ({len(frozen_params)} parámetros)")
+        print(f"Congeladas {n_freeze} capas tempranas ({len(frozen_params)} parámetros)")
         
     elif freeze_strategy == 'critic_only':
         # Congelar todo el actor
@@ -155,7 +155,7 @@ def freeze_layers(
             param.requires_grad = False
             frozen_params.append(f'actor.{name}')
         
-        print(f"🧊 Actor completamente congelado ({len(frozen_params)} parámetros)")
+        print(f"Actor completamente congelado ({len(frozen_params)} parámetros)")
     
     # Recrear optimizadores solo con parámetros entrenables
     trainable_actor = [p for p in agent.actor.parameters() if p.requires_grad]
@@ -228,7 +228,7 @@ def setup_transfer_learning(
         agent: Agente listo para fine-tuning
     """
     print("=" * 60)
-    print("🔄 CONFIGURANDO TRANSFER LEARNING")
+    print(" CONFIGURANDO TRANSFER LEARNING")
     print("=" * 60)
     
     # 1. Cargar agente pre-entrenado
@@ -253,7 +253,7 @@ def setup_transfer_learning(
     
     # 3. Limpiar replay buffer (experiencia del reactor anterior no aplica)
     agent.memory.clear()
-    print(f"🗑️  Replay buffer limpiado")
+    print(f"Replay buffer limpiado")
     
     # 4. Resetear contadores de entrenamiento (nuevo problema)
     agent.training_step = 0
@@ -261,7 +261,7 @@ def setup_transfer_learning(
     print(f"🔢 Contadores reseteados")
     
     print("=" * 60)
-    print("✅ Agente listo para fine-tuning")
+    print("Agente listo para fine-tuning")
     print(f"   LR Actor:  {lr_actor} | LR Critic: {lr_critic}")
     print(f"   Entropía:  {entropy_coef}")
     print(f"   Warmup:    {warmup_steps} steps")

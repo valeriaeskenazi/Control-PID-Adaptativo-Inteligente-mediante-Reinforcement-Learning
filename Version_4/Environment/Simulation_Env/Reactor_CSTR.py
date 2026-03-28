@@ -202,11 +202,11 @@ class CSTRSimulator:
         """
         if Caf is not None:
             self.Caf = Caf
-            print(f"🔀 Perturbación aplicada: Caf = {Caf} mol/m³")
+            print(f"Perturbación aplicada: Caf = {Caf} mol/m³")
         
         if Tf is not None:
             self.Tf = Tf
-            print(f"🔀 Perturbación aplicada: Tf = {Tf} K")
+            print(f"Perturbación aplicada: Tf = {Tf} K")
     
     @staticmethod
     def _denormalize(value: float, min_val: float, max_val: float) -> float:
