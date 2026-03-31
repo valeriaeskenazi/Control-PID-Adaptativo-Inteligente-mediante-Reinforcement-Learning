@@ -34,7 +34,7 @@ class ResponseTimeDetector:
         pvs = list(pvs_inicial)
         t = 0
         dead_bands = [
-            max(self.tolerance * abs(sp - pv0), 0.5)
+            max(self.tolerance * abs(sp - pv0), self.tolerance * 0.5)
             for sp, pv0 in zip(sps, pvs_inicial)
         ]
         
