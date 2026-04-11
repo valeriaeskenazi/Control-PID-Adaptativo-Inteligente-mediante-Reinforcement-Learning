@@ -36,8 +36,14 @@ class HeatExchangerSimulator:
         self.theta = 0.125   # Tiempo muerto (min)
 
         # Límites de la variable manipulable (señal de control en mA)
-        self.u_min = control_limits[0][0]
-        self.u_max = control_limits[0][1]
+        # En variables desviación: u_abs ∈ [4, 20] mA, u_ss = 12 mA
+        # → u_dev ∈ [-8, +8] mA
+        self.u_abs_min = 4.0    # mA absoluto
+        self.u_abs_max = 20.0   # mA absoluto
+        self.u_ss_abs  = 12.0   # mA absoluto (punto de operación nominal)
+        
+        self.u_min = control_limits[0][0]  # En variables desviación
+        self.u_max = control_limits[0][1]  # En variables desviación
 
         # Estado estacionario
         # Con u_ss = 12 mA → T_out_ss = K * u_ss = 11.2455 * 12 ≈ 134.9 °C
@@ -80,7 +86,7 @@ class HeatExchangerSimulator:
             [T_out] — temperatura de salida en variables desviación (°C)
         """
         u = float(control_outputs[0])
-        u = np.clip(u, self.u_min - self.u_ss, self.u_max - self.u_ss)
+        u = np.clip(u, self.u_min, self.u_max)
         self.u_current = u
 
         # Actualizar buffer de tiempo muerto
