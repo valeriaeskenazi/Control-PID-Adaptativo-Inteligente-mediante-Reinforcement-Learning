@@ -47,6 +47,7 @@ class HeatExchangerSimulator:
 
         # Estado actual
         self.T_out = self.T_out_ss
+        self.state = np.array([self.T_out])  # Compatibilidad con SimulationPIDEnv
 
         # Buffer para tiempo muerto (delay de 1 paso)
         self._delay_steps = max(1, round(self.theta / self.dt))
@@ -97,6 +98,7 @@ class HeatExchangerSimulator:
 
         # Clip físico (±50°C en variables desviación es razonable)
         self.T_out = np.clip(self.T_out, -50.0, 50.0)
+        self.state = np.array([self.T_out])
 
         # Ruido de sensor
         T_meas = self.T_out + np.random.uniform(-0.05, 0.05)
@@ -128,6 +130,7 @@ class HeatExchangerSimulator:
         # Resetear buffer de delay
         self._u_buffer = [self.u_ss] * (self._delay_steps + 1)
         self.u_current = self.u_ss
+        self.state = np.array([self.T_out])
 
         return self.get_initial_pvs()
 
@@ -158,4 +161,5 @@ class HeatExchangerSimulator:
         """
         if delta_T_in is not None:
             self.T_out += delta_T_in * 0.5  # ganancia de perturbación aproximada
+            self.state = np.array([self.T_out])
             print(f"Perturbación aplicada: ΔT_in = {delta_T_in} °C")
