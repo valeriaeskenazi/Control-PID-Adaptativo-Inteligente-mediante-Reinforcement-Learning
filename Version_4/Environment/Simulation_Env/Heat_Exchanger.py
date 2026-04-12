@@ -62,6 +62,16 @@ class HeatExchangerSimulator:
         # Control actual
         self.u_current = self.u_ss
 
+        # Perturbación persistente en T_in (variables desviación)
+        self.d_T_in = 0.0  # Perturbación actual en T_in
+        # Parámetros de Gd (del ensayo 2 del informe 2013)
+        self.K_d = 1.0          # Ganancia de perturbación (°C/°C)
+        self.tau_d = 0.915      # Constante de tiempo de perturbación (min)
+        self.theta_d = 0.315    # Tiempo muerto de perturbación (min)
+        self._d_delay_steps = max(1, round(self.theta_d / self.dt))
+        self._d_buffer = [0.0] * (self._d_delay_steps + 1)
+        self.T_out_d = 0.0      # Estado del filtro de perturbación
+
     # ------------------------------------------------------------------
     # Interfaz requerida por SimulationPIDEnv
     # ------------------------------------------------------------------
@@ -97,17 +107,29 @@ class HeatExchangerSimulator:
         # Acción retardada
         u_delayed = self._u_buffer[0]
 
-        # Integrar ODE: τ·dT/dt = -T + K·u_delayed
-        # Euler explícito (dt pequeño → suficientemente preciso)
+        # Perturbación con dinámica Gd: τd·dT_d/dt = -T_d + Kd·d(t-θd)
+        self._d_buffer.append(self.d_T_in)
+        if len(self._d_buffer) > self._d_delay_steps + 1:
+            self._d_buffer.pop(0)
+        d_delayed = self._d_buffer[0]
+        
+        dTd_dt = (-self.T_out_d + self.K_d * d_delayed) / self.tau_d
+        self.T_out_d += dTd_dt * dt
+
+        # Integrar ODE del proceso: τ·dT/dt = -T + K·u_delayed
+        # T_out total = respuesta al control + respuesta a perturbación
         dTdt = (-self.T_out + self.K * u_delayed) / self.tau
         self.T_out += dTdt * dt
+        
+        # Temperatura medida = proceso + perturbación
+        T_total = self.T_out + self.T_out_d
 
         # Clip físico (±50°C en variables desviación es razonable)
-        self.T_out = np.clip(self.T_out, -50.0, 50.0)
-        self.state = np.array([self.T_out])
+        T_total = np.clip(T_total, -50.0, 50.0)
+        self.state = np.array([T_total])
 
         # Ruido de sensor
-        T_meas = self.T_out + np.random.uniform(-0.05, 0.05)
+        T_meas = T_total + np.random.uniform(-0.05, 0.05)
 
         return [float(T_meas)]
 
@@ -136,6 +158,12 @@ class HeatExchangerSimulator:
         # Resetear buffer de delay
         self._u_buffer = [self.u_ss] * (self._delay_steps + 1)
         self.u_current = self.u_ss
+        
+        # Resetear perturbación
+        self.d_T_in = 0.0
+        self.T_out_d = 0.0
+        self._d_buffer = [0.0] * (self._d_delay_steps + 1)
+        
         self.state = np.array([self.T_out])
 
         return self.get_initial_pvs()
@@ -145,27 +173,26 @@ class HeatExchangerSimulator:
         Estado actual del simulador.
 
         Returns:
-            [T_out] en variables desviación
+            [T_out_total] en variables desviación (proceso + perturbación)
         """
-        return [float(self.T_out)]
+        return [float(self.T_out + self.T_out_d)]
 
     def get_measurements(self) -> Dict[str, float]:
         """Mediciones con ruido."""
+        T_total = self.T_out + self.T_out_d
         return {
-            'T_out': self.T_out + np.random.uniform(-0.05, 0.05),
+            'T_out': T_total + np.random.uniform(-0.05, 0.05),
             'u':     self.u_current
         }
 
     def set_disturbance(self, delta_T_in: Optional[float] = None):
         """
-        Introduce una perturbación en la temperatura de entrada.
-        Se modela como un cambio en el estado actual (efecto inmediato).
-
+        Introduce una perturbación persistente en la temperatura de entrada.
+        La perturbación se propaga a T_out a través de la dinámica Gd(s).
+        
         Args:
-            delta_T_in: cambio en T_in (°C) — se traduce a un offset en T_out
-                        via la ganancia de perturbación (aprox 1:1 para FOPDT)
+            delta_T_in: cambio en T_in (°C) — perturbación escalón sostenida
         """
         if delta_T_in is not None:
-            self.T_out += delta_T_in * 0.5  # ganancia de perturbación aproximada
-            self.state = np.array([self.T_out])
-            print(f"Perturbación aplicada: ΔT_in = {delta_T_in} °C")
+            self.d_T_in = delta_T_in  # Escalón persistente
+            print(f"Perturbación aplicada: ΔT_in = {delta_T_in} °C (persistente)")
